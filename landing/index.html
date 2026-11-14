@@ -341,12 +341,51 @@ function render() {
   v.innerHTML = (S.needLogin ? '<div class="msg err">Your sign-in has expired. Saved items are safe on this device. <button class="small" data-act="relogin">Sign in again</button></div>' : '') + flash() + fn();
   if (S.view === 'landing' && $('#lines') && !$('#lines').children.length) addLine();
 }
+// Sign-in with a one-time code sent by email (no password). An address with no
+// account is answered exactly like one with an account, so the form cannot be
+// used to find out who is registered.
+function requestCode(email) {
+  return raw('/auth/v1/otp', { method: 'POST', headers: { apikey: S.cfg.key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim().toLowerCase(), create_user: false }) }).then(function (r) {
+    if (r.ok) return true;
+    return r.json().then(null, function () { return {}; }).then(function (j) {
+      if (r.status >= 500) throw new NetErr();
+      if (j.error_code === 'otp_disabled' || /signups not allowed/i.test(j.msg || '')) return true;
+      if (r.status === 429) throw new ApiErr('A code was sent a moment ago. Wait a minute before asking for another.', j.error_code, 429);
+      throw new ApiErr('The code could not be sent (' + (j.msg || j.error_description || 'status ' + r.status) + ').', j.error_code, r.status);
+    });
+  });
+}
+function verifyCode(email, code) {
+  return raw('/auth/v1/verify', { method: 'POST', headers: { apikey: S.cfg.key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'email', email: email.trim().toLowerCase(), token: code }) }).then(function (r) {
+    return r.json().then(null, function () { throw new NetErr('Connection lost'); }).then(function (j) {
+      if (!r.ok) { if (r.status >= 500) throw new NetErr(); throw new ApiErr('That code is wrong or has expired. Check it, or ask for a new one.', j.error_code, r.status); }
+      if (!j.access_token) throw new ApiErr('Sign-in did not complete. Ask for a new code.', 'no_session', r.status);
+      saveSession(j); S.needLogin = false; return j;
+    });
+  });
+}
 function viewLogin() {
+  var m = S.loginMode || 'password', em = esc(S.loginEmail || '');
+  var note = '<p class="muted">A connection is needed to sign in. After that, trips and landings can be recorded without one.</p>';
+  if (m === 'email') return '<h2>Sign in with a code</h2>' + flash() + '<form data-form="otpsend" class="card" id="code-request">' +
+    '<label for="otp-email">Email</label><input id="otp-email" type="email" autocomplete="username" value="' + em + '" required>' +
+    '<p class="muted">A sign-in code will be sent to this address. No password is needed.</p>' +
+    '<button class="big" type="submit" id="otp-send">Send me a code</button>' +
+    '<div style="height:8px"></div><button type="button" class="big sec" data-act="loginmode" data-mode="password" id="to-password">Use a password instead</button>' + note + '</form>';
+  if (m === 'code') return '<h2>Enter your code</h2>' + flash() +
+    '<div class="msg info" id="otp-sent">If ' + em + ' has an account, a code has been sent to it. It can take a minute to arrive. No email? Check the address, or ask your administrator.</div>' +
+    '<form data-form="otpverify" class="card" id="code-verify">' +
+    '<label for="otp-code">Code from the email</label><input id="otp-code" inputmode="numeric" autocomplete="one-time-code" maxlength="12">' +
+    '<div style="height:12px"></div><button class="big" type="submit" id="otp-go">Sign in</button>' +
+    '<div style="height:8px"></div><button type="button" class="big sec" data-act="loginmode" data-mode="email" id="otp-again">Send a new code</button>' +
+    '<div style="height:8px"></div><button type="button" class="big sec" data-act="loginmode" data-mode="password" id="to-password">Use a password instead</button></form>';
   return '<h2>Sign in</h2>' + flash() + '<form data-form="login" class="card">' +
-    '<label for="email">Email</label><input id="email" type="email" autocomplete="username" required>' +
+    '<label for="email">Email</label><input id="email" type="email" autocomplete="username" value="' + em + '" required>' +
     '<label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required>' +
     '<div style="height:12px"></div><button class="big" type="submit">Sign in</button>' +
-    '<p class="muted">A connection is needed to sign in. After that, trips and landings can be recorded without one.</p></form>';
+    '<div style="height:8px"></div><button type="button" class="big sec" data-act="loginmode" data-mode="email" id="to-code">Sign in with a code sent by email</button>' + note + '</form>';
 }
 function viewTrips() {
   if (!S.org) return '<div class="msg info">This account is not yet a member of any organisation. Ask your BMU or cooperative administrator to add you.</div>';
@@ -486,6 +525,11 @@ function paintFisherResults() {
 var ACT = {
   go: function (el) { go(el.getAttribute('data-view')); },
   relogin: function () { saveSessionKeepQueue(); },
+  loginmode: function (el) {
+    var e = $('#email') || $('#otp-email');
+    if (e && e.value.trim()) S.loginEmail = e.value.trim();
+    S.loginMode = el.getAttribute('data-mode'); render();
+  },
   land: function (el) { go('landing', el.getAttribute('data-id')); },
   'cancel-open': function (el) { var f = el.closest('.card').querySelector('form[data-form=cancel]'); f.className = f.className ? '' : 'hide'; },
   'reject-open': function (el) { var f = el.closest('.card').querySelector('form[data-form=reject]'); f.className = f.className ? '' : 'hide'; },
@@ -534,13 +578,33 @@ function busy(p, okText) {
   return p.then(function () { if (okText) S.flash = { kind: 'ok', text: okText }; render(); },
     function (e) { S.flash = { kind: 'err', text: e instanceof NetErr ? 'No connection. Try again when you have signal.' : e.message }; if (e instanceof AuthErr) S.needLogin = true; render(); });
 }
+function afterSignIn() {
+  S.loginMode = 'password'; S.loginEmail = '';
+  return loadCache().then(function () {
+    render();
+    return refreshAll().then(function () { return loadCache(); }).then(function () { render(); sync(); }, function () { render(); });
+  });
+}
 var FORMS = {
   login: function (f) {
     var b = f.querySelector('button'); b.disabled = true;
-    signIn($('#email').value, $('#password').value).then(function () { return loadCache(); }).then(function () {
-      render();
-      return refreshAll().then(function () { return loadCache(); }).then(function () { render(); sync(); }, function () { render(); });
-    }, function (e) { S.flash = { kind: 'err', text: e instanceof NetErr ? 'No connection. A connection is needed to sign in.' : e.message }; render(); });
+    signIn($('#email').value, $('#password').value).then(afterSignIn,
+      function (e) { S.flash = { kind: 'err', text: e instanceof NetErr ? 'No connection. A connection is needed to sign in.' : e.message }; render(); });
+  },
+  otpsend: function (f) {
+    var email = $('#otp-email').value.trim(), b = f.querySelector('button');
+    S.loginEmail = email;
+    if (!/^[^@\s]+@[^@\s]+$/.test(email)) { S.flash = { kind: 'err', text: 'Enter your full email address.' }; return render(); }
+    b.disabled = true;
+    requestCode(email).then(function () { S.loginMode = 'code'; render(); },
+      function (e) { S.flash = { kind: 'err', text: e instanceof NetErr ? 'No connection. A connection is needed to sign in.' : e.message }; render(); });
+  },
+  otpverify: function (f) {
+    var code = $('#otp-code').value.replace(/\s+/g, ''), b = f.querySelector('button');
+    if (!/^\d{6,10}$/.test(code)) { S.flash = { kind: 'err', text: 'Enter the code from the email, digits only.' }; return render(); }
+    b.disabled = true;
+    verifyCode(S.loginEmail, code).then(afterSignIn,
+      function (e) { S.flash = { kind: 'err', text: e instanceof NetErr ? 'No connection. A connection is needed to sign in.' : e.message }; render(); });
   },
   trip: function () {
     keepTripDraft(); var d = S.draft;

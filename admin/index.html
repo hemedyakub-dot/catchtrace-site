@@ -81,7 +81,7 @@ var ROLES = [['org_admin', 'Administrator'], ['clerk', 'Clerk (enters records)']
              ['platform_admin', 'Platform administrator']];
 var AREA_TYPES = [['inshore', 'Inshore'], ['reef', 'Reef'], ['channel', 'Channel'], ['offshore', 'Offshore'], ['other', 'Other']];
 var OP_SOURCE = 'Added by the operator in the administration page';
-var S = { cfg: null, session: null, ctx: null, species: [], history: {}, q: '', open: null, adding: false, flash: null, busy: false, loading: false,
+var S = { cfg: null, session: null, ctx: null, species: [], history: {}, q: '', open: null, adding: false, login: { mode: 'password', email: '' }, flash: null, busy: false, loading: false,
           tab: 'species', orgs: null, counties: null, sites: null, gear: null, areas: null, members: {}, orgOpen: null, form: null, removing: null, orgCid: null,
           corr: null, corrRefs: {}, corrCatch: null, corrCid: null, rejecting: null, approving: null, report: null, audit: null };
 
@@ -130,6 +130,31 @@ function signIn(email, password) {
     body: JSON.stringify({ email: email.trim().toLowerCase(), password: password }) }).then(function (r) {
     return r.json().then(null, function () { throw new NetErr('Connection lost'); }).then(function (j) {
       if (!r.ok) { if (r.status >= 500) throw new NetErr(); throw new ApiErr(j.error_description || j.msg || 'Sign-in failed', j.error, r.status); }
+      saveSession(j); return j;
+    });
+  });
+}
+// Sign-in with a one-time code sent by email (no password). An address with no
+// account is answered exactly like one with an account, so the form cannot be
+// used to find out who is registered.
+function requestCode(email) {
+  return raw('/auth/v1/otp', { method: 'POST', headers: { apikey: S.cfg.key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim().toLowerCase(), create_user: false }) }).then(function (r) {
+    if (r.ok) return true;
+    return r.json().then(null, function () { return {}; }).then(function (j) {
+      if (r.status >= 500) throw new NetErr();
+      if (j.error_code === 'otp_disabled' || /signups not allowed/i.test(j.msg || '')) return true;
+      if (r.status === 429) throw new ApiErr('A code was sent a moment ago. Wait a minute before asking for another.', j.error_code, 429);
+      throw new ApiErr('The code could not be sent (' + (j.msg || j.error_description || 'status ' + r.status) + ').', j.error_code, r.status);
+    });
+  });
+}
+function verifyCode(email, code) {
+  return raw('/auth/v1/verify', { method: 'POST', headers: { apikey: S.cfg.key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'email', email: email.trim().toLowerCase(), token: code }) }).then(function (r) {
+    return r.json().then(null, function () { throw new NetErr('Connection lost'); }).then(function (j) {
+      if (!r.ok) { if (r.status >= 500) throw new NetErr(); throw new ApiErr('That code is wrong or has expired. Check it, or ask for a new one.', j.error_code, r.status); }
+      if (!j.access_token) throw new ApiErr('Sign-in did not complete. Ask for a new code.', 'no_session', r.status);
       saveSession(j); return j;
     });
   });
@@ -217,15 +242,16 @@ function failAfterWrite(e) {
   if (!(e instanceof NetErr)) return fail(e);
   return loadSpecies().then(function () { fail(e, true); }, function () { fail(e); });
 }
+function afterSignIn() { S.busy = false; S.login = { mode: 'password', email: '' }; return loadAll(); }
 function doSignIn(ev) {
   ev.preventDefault();
   if (S.busy) return;
   setFlash(null); setBusy(true);
-  signIn($('#email').value, $('#password').value).then(function () { S.busy = false; return loadAll(); },
+  signIn($('#email').value, $('#password').value).then(afterSignIn,
     function (e) { setBusy(false); setFlash('err', e instanceof NetErr ? 'No connection. Try again.' : 'Sign-in failed. Check the email and password.'); });
 }
 function doSignOut() {
-  saveSession(null);
+  saveSession(null); S.login = { mode: 'password', email: '' };
   S.ctx = null; S.species = []; S.history = {}; S.open = null; S.adding = false; S.flash = null; S.q = ''; S.tab = 'species';
   S.orgs = null; S.sites = null; S.gear = null; S.areas = null; S.members = {}; S.orgOpen = null; S.form = null; S.removing = null;
   S.corr = null; S.corrRefs = {}; S.corrCatch = null; S.report = null; S.audit = null; render();
@@ -275,14 +301,54 @@ function field(label, input) { return [h('label', { 'for': input.id, text: label
 function flash() { return h('div', { id: 'flash-box' }, S.flash ? h('div', { 'class': 'msg ' + S.flash[0], id: 'flash', text: S.flash[1] }) : null); }
 function submitBtn(id, label, busyLabel, cls) { return h('button', { type: 'submit', id: id, 'class': cls, 'data-label': label, 'data-busy': busyLabel, disabled: S.busy, text: S.busy ? busyLabel : label }); }
 
+function loginMode(mode) {
+  var e = $('#email') || $('#otp-email');
+  if (e && e.value.trim()) S.login.email = e.value.trim();
+  S.login.mode = mode; S.flash = null; render();
+}
+function doSendCode(ev) {
+  ev.preventDefault();
+  if (S.busy) return;
+  var email = $('#otp-email').value.trim();
+  if (!/^[^@\s]+@[^@\s]+$/.test(email)) return setFlash('err', 'Enter your full email address.');
+  setFlash(null); setBusy(true);
+  requestCode(email).then(function () { S.busy = false; S.login = { mode: 'code', email: email }; S.flash = null; render(); },
+    function (e) { setBusy(false); setFlash('err', e instanceof NetErr ? 'No connection. Try again.' : e.message); });
+}
+function doVerifyCode(ev) {
+  ev.preventDefault();
+  if (S.busy) return;
+  var code = $('#otp-code').value.replace(/\s+/g, '');
+  if (!/^\d{6,10}$/.test(code)) return setFlash('err', 'Enter the code from the email, digits only.');
+  setFlash(null); setBusy(true);
+  verifyCode(S.login.email, code).then(afterSignIn, function (e) { setBusy(false); setFlash('err', e instanceof NetErr ? 'No connection. Try again.' : e.message); });
+}
+function loginBtn(id, label, busyLabel) {
+  return h('button', { type: 'submit', id: id, 'class': 'big', 'data-label': label, 'data-busy': busyLabel, disabled: S.busy, text: S.busy ? busyLabel : label });
+}
+function linkBtn(id, text, mode) {
+  return h('button', { type: 'button', id: id, 'class': 'sec', style: 'width:100%;margin-top:8px', text: text, onclick: function () { loginMode(mode); } });
+}
 function viewLogin() {
-  return [
-    h('h2', { text: 'Sign in' }), flash(),
+  var m = S.login.mode;
+  if (m === 'email') return [h('h2', { text: 'Sign in with a code' }), flash(),
+    h('form', { 'class': 'card', id: 'code-request', onsubmit: doSendCode },
+      field('Email', h('input', { id: 'otp-email', type: 'email', autocomplete: 'username', value: S.login.email, required: true })),
+      h('p', { 'class': 'muted', text: 'A sign-in code will be sent to this address. No password is needed.' }),
+      h('div', { 'class': 'actions' }, loginBtn('otp-send', 'Send me a code', 'Sending...')),
+      linkBtn('to-password', 'Use a password instead', 'password'))];
+  if (m === 'code') return [h('h2', { text: 'Enter your code' }), flash(),
+    h('div', { 'class': 'msg info', id: 'otp-sent', text: 'If ' + S.login.email + ' has an account, a code has been sent to it. It can take a minute to arrive. No email? Check the address, or ask your administrator.' }),
+    h('form', { 'class': 'card', id: 'code-verify', onsubmit: doVerifyCode },
+      field('Code from the email', h('input', { id: 'otp-code', inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: '12' })),
+      h('div', { 'class': 'actions' }, loginBtn('otp-go', 'Sign in', 'Signing in...')),
+      linkBtn('otp-again', 'Send a new code', 'email'), linkBtn('to-password', 'Use a password instead', 'password'))];
+  return [h('h2', { text: 'Sign in' }), flash(),
     h('form', { 'class': 'card', id: 'login', onsubmit: doSignIn },
-      field('Email', h('input', { id: 'email', type: 'email', autocomplete: 'username', required: true })),
+      field('Email', h('input', { id: 'email', type: 'email', autocomplete: 'username', value: S.login.email, required: true })),
       field('Password', h('input', { id: 'password', type: 'password', autocomplete: 'current-password', required: true })),
-      h('div', { 'class': 'actions' }, submitBtn('login-go', 'Sign in', 'Signing in...', 'big')))
-  ];
+      h('div', { 'class': 'actions' }, loginBtn('login-go', 'Sign in', 'Signing in...')),
+      linkBtn('to-code', 'Sign in with a code sent by email', 'email'))];
 }
 function addCard() {
   if (!isAdmin()) return h('div', { 'class': 'msg info', id: 'readonly', text: 'You can read the species list. Only the platform administrator can add or amend species.' });
