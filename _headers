@@ -13,5 +13,7 @@
   Cache-Control: no-cache
 /admin/config.json
   Cache-Control: no-cache
+/commercial/config.json
+  Cache-Control: no-cache
 /landing/manifest.webmanifest
   Content-Type: application/manifest+json
