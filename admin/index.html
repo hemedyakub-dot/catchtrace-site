@@ -44,6 +44,15 @@ button:disabled{opacity:.5;cursor:default}
 .hist div{font-size:13px;margin:0 0 8px;overflow-wrap:anywhere}
 .actions{display:flex;gap:8px;margin-top:12px}
 .actions button{flex:1}
+.tabs{display:flex;gap:8px;margin:0 0 12px;flex-wrap:wrap}
+.tabs button{flex:1;background:#fff;color:#33414d;border:1px solid #c5ced6}
+.tabs button.on{background:#0b3c5d;color:#fff;border-color:#0b3c5d}
+.list div.item{border-top:1px solid #e6eaee;padding:8px 0;font-size:14px;overflow-wrap:anywhere}
+.list div.item:first-child{border-top:0}
+button.danger{background:#fff;color:#a32626;border:1px solid #a32626}
+input[type=checkbox]{width:24px;height:24px;min-height:0;padding:0;flex:none}
+.checkrow{display:flex;gap:10px;align-items:center;margin-top:12px}
+.checkrow label{margin:0}
 </style>
 </head>
 <body>
@@ -60,7 +69,15 @@ var CATS = [['finfish', 'Fish'], ['crustacean', 'Prawn, crab or lobster'], ['cep
 var STATUS = { unverified: ['Unverified', 'wait'], authoritative: ['Authoritative', 'ok'], demo: ['Demo', ''] };
 var FIELD = { common_name_en: 'English name', common_name_sw: 'Swahili name', scientific_name: 'Scientific name', category: 'Category' };
 var SESSION_KEY = 'ct.admin.session';
-var S = { cfg: null, session: null, ctx: null, species: [], history: {}, q: '', open: null, adding: false, flash: null, busy: false, loading: false };
+var ORG_TYPES = [['bmu', 'Beach Management Unit'], ['cooperative', 'Cooperative'], ['buyer', 'Buyer'], ['processor', 'Processor'],
+                 ['logistics', 'Transport or cold storage'], ['fisheries_authority', 'Fisheries authority'], ['research', 'Research body'],
+                 ['platform_operator', 'Platform operator']];
+var ROLES = [['org_admin', 'Administrator'], ['clerk', 'Clerk (enters records)'], ['verifier', 'Verifier (confirms records)'], ['viewer', 'Viewer (reads only)'],
+             ['platform_admin', 'Platform administrator']];
+var AREA_TYPES = [['inshore', 'Inshore'], ['reef', 'Reef'], ['channel', 'Channel'], ['offshore', 'Offshore'], ['other', 'Other']];
+var OP_SOURCE = 'Added by the operator in the administration page';
+var S = { cfg: null, session: null, ctx: null, species: [], history: {}, q: '', open: null, adding: false, flash: null, busy: false, loading: false,
+          tab: 'species', orgs: null, counties: null, sites: null, gear: null, areas: null, members: {}, orgOpen: null, form: null, removing: null, orgCid: null };
 
 // ------------------------------------------------------------------- dom
 // Everything shown comes through text nodes; no markup is built from data.
@@ -180,11 +197,11 @@ function setBusy(on) {
     btn.disabled = on; btn.textContent = on ? btn.getAttribute('data-busy') : btn.getAttribute('data-label');
   });
 }
-function fail(e, redraw) {
+function fail(e, redraw, dupText) {
   S.busy = false;
   if (e instanceof AuthErr) { saveSession(null); S.ctx = null; S.open = null; S.adding = false; S.flash = ['err', 'Your sign-in has ended. Sign in again.']; return render(); }
   var text = e instanceof NetErr ? 'Connection problem. Check the list below before trying again - the change may or may not have been saved.'
-           : (e && e.code === '23505') ? 'A species with this English name already exists.'
+           : (e && e.code === '23505') ? (dupText || 'A species with this English name already exists.')
            : (e && e.message) || 'Something went wrong.';
   if (redraw) { S.flash = ['err', text]; return render(); }
   setBusy(false); setFlash('err', text);
@@ -201,7 +218,11 @@ function doSignIn(ev) {
   signIn($('#email').value, $('#password').value).then(function () { S.busy = false; return loadAll(); },
     function (e) { setBusy(false); setFlash('err', e instanceof NetErr ? 'No connection. Try again.' : 'Sign-in failed. Check the email and password.'); });
 }
-function doSignOut() { saveSession(null); S.ctx = null; S.species = []; S.history = {}; S.open = null; S.adding = false; S.flash = null; S.q = ''; render(); }
+function doSignOut() {
+  saveSession(null);
+  S.ctx = null; S.species = []; S.history = {}; S.open = null; S.adding = false; S.flash = null; S.q = ''; S.tab = 'species';
+  S.orgs = null; S.sites = null; S.gear = null; S.areas = null; S.members = {}; S.orgOpen = null; S.form = null; S.removing = null; render();
+}
 function doAdd(ev) {
   ev.preventDefault();
   if (S.busy) return;
@@ -335,13 +356,250 @@ function viewSpecies() {
     h('div', { id: 'sp-list' }, listNodes())
   ];
 }
+
+// ============================================ organisations, people, places
+function uuid() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  var b = new Uint8Array(16); crypto.getRandomValues(b); b[6] = (b[6] & 15) | 64; b[8] = (b[8] & 63) | 128;
+  var x = Array.prototype.map.call(b, function (n) { return ('0' + n.toString(16)).slice(-2); }).join('');
+  return x.slice(0, 8) + '-' + x.slice(8, 12) + '-' + x.slice(12, 16) + '-' + x.slice(16, 20) + '-' + x.slice(20);
+}
+function lbl(list, code) { for (var i = 0; i < list.length; i++) if (list[i][0] === code) return list[i][1]; return String(code).replace(/_/g, ' '); }
+function countyName(id) { var c = (S.counties || []).filter(function (x) { return x.id === id; })[0]; return c ? c.name : 'County not set'; }
+function orgName(id) { var o = (S.orgs || []).filter(function (x) { return x.id === id; })[0]; return o ? o.name : ''; }
+function adminOf(orgId) { return (S.ctx.memberships || []).some(function (m) { return m.organization_id === orgId && m.role === 'org_admin'; }); }
+function demoDefault() { return S.cfg.env !== 'production'; }
+function loadOrgs() {
+  return Promise.all([
+    get('organizations', 'select=id,name,org_type,county_id,registration_no,status,is_demo&order=name.asc'),
+    S.counties ? Promise.resolve(S.counties) : get('counties', 'select=id,code,name&order=name.asc')
+  ]).then(function (r) { S.orgs = r[0] || []; S.counties = r[1] || []; });
+}
+function loadPlaces() {
+  return Promise.all([
+    loadOrgs(),
+    get('landing_sites', 'select=id,name,county_id,bmu_organization_id,status,data_status,is_demo&order=name.asc'),
+    get('gear_types', 'select=id,code,name,is_demo&order=name.asc'),
+    get('fishing_areas', 'select=id,code,name,county_id,area_type,data_status,is_demo&order=name.asc')
+  ]).then(function (r) { S.sites = r[1] || []; S.gear = r[2] || []; S.areas = r[3] || []; });
+}
+function loadMembers(id) { return rpc('org_members', { p_org: id }).then(function (rows) { S.members[id] = rows || []; }); }
+function go(tab) {
+  S.tab = tab; S.open = null; S.adding = false; S.form = null; S.orgOpen = null; S.removing = null; S.flash = null;
+  if (tab === 'species') return render();
+  S.loading = true; render();
+  (tab === 'orgs' ? loadOrgs() : loadPlaces()).then(function () { S.loading = false; render(); }, function (e) { S.loading = false; fail(e, true); });
+}
+// Run a write, reload what it changed, redraw with a confirmation. After a
+// connection problem the list is reloaded so it shows whether it was saved.
+function act(make, okText, reloadFn, after, dupText) {
+  if (S.busy) return;
+  setFlash(null); setBusy(true);
+  make().then(function (res) { if (after) after(res); return reloadFn(); })
+    .then(function () { S.busy = false; S.flash = ['ok', okText]; render(); }, function (e) {
+      if (e instanceof NetErr) return reloadFn().then(function () { fail(e, true); }, function () { fail(e); });
+      fail(e, false, dupText);
+    });
+}
+function account(email) {
+  return rpc('find_user', { p_email: email }).then(function (u) {
+    if (!u) throw new ApiErr('No account uses that email address. The person needs a sign-in before they can be given a role.', 'P0002', 200);
+    return u;
+  });
+}
+function doRegisterOrg(ev) {
+  ev.preventDefault();
+  var name = $('#org-name').value.trim(), email = $('#org-admin').value.trim(), reg = $('#org-reg').value.trim();
+  if (!name) return setFlash('err', 'Enter the name of the organisation.');
+  if (!email) return setFlash('err', 'Enter the email address of the person who will administer it.');
+  var a = { p_name: name, p_org_type: $('#org-type').value, p_county_code: $('#org-county').value || null, p_registration_no: reg || null, p_is_demo: $('#org-demo').checked };
+  act(function () {
+    return account(email).then(function (u) {
+      a.p_admin_user_id = u.user_id; a.p_client_id = S.orgCid || (S.orgCid = uuid());
+      return rpc('register_organization', a);
+    });
+  }, 'Registered: ' + name + '. ' + email + ' is its administrator.', loadOrgs, function () { S.form = null; S.orgCid = null; },
+     'An organisation of this type with this name already exists.');
+}
+function openMembers(id) {
+  S.orgOpen = S.orgOpen === id ? null : id; S.flash = null; S.removing = null; S.form = null; render();
+  if (S.orgOpen) loadMembers(id).then(function () { if (S.orgOpen === id) render(); }, function (e) { fail(e, true); });
+}
+function doAddMember(ev) {
+  ev.preventDefault();
+  var org = S.orgOpen, email = $('#mem-email').value.trim(), role = $('#mem-role').value;
+  if (!email) return setFlash('err', 'Enter the person\'s email address.');
+  act(function () { return account(email).then(function (u) { return rpc('set_member', { p_org: org, p_user_id: u.user_id, p_role: role, p_active: true }); }); },
+      email + ' is now: ' + lbl(ROLES, role) + '.', function () { return loadMembers(org); });
+}
+function doRemoveMember(m) {
+  var key = m.user_id + ':' + m.role, org = S.orgOpen;
+  if (S.removing !== key) { S.removing = key; S.flash = null; return render(); }
+  act(function () { return rpc('set_member', { p_org: org, p_user_id: m.user_id, p_role: m.role, p_active: false }); },
+      m.email + ' is no longer: ' + lbl(ROLES, m.role) + '.', function () { return loadMembers(org); }, function () { S.removing = null; });
+}
+function doAddSite(ev) {
+  ev.preventDefault();
+  var name = $('#site-name').value.trim(), demo = $('#site-demo').checked;
+  if (!name) return setFlash('err', 'Enter the name of the landing site.');
+  act(function () { return rpc('add_landing_site', { p_name: name, p_county_code: $('#site-county').value, p_bmu_org: $('#site-bmu').value || null,
+                                                    p_data_status: demo ? 'demo' : 'unverified', p_source: OP_SOURCE, p_source_ref: null }); },
+      'Added: ' + name + (demo ? ', as demo data.' : ', as unverified.'), loadPlaces, function () { S.form = null; }, 'A landing site with this name already exists in that county.');
+}
+function doAddGear(ev) {
+  ev.preventDefault();
+  var code = $('#gear-code').value.trim().toUpperCase(), name = $('#gear-name').value.trim();
+  if (!code || !name) return setFlash('err', 'Enter both a short code and a name for the gear.');
+  act(function () { return rpc('add_gear_type', { p_code: code, p_name: name, p_source: OP_SOURCE, p_is_demo: $('#gear-demo').checked }); },
+      'Added: ' + name + '.', loadPlaces, function () { S.form = null; }, 'A gear type with this code already exists.');
+}
+function doAddArea(ev) {
+  ev.preventDefault();
+  var code = $('#area-code').value.trim().toUpperCase(), name = $('#area-name').value.trim(), demo = $('#area-demo').checked;
+  if (!code || !name) return setFlash('err', 'Enter both a short code and a name for the fishing area.');
+  act(function () { return rpc('add_fishing_area', { p_code: code, p_name: name, p_county_code: $('#area-county').value || null, p_area_type: $('#area-type').value,
+                                                    p_data_status: demo ? 'demo' : 'unverified', p_source: OP_SOURCE, p_source_ref: null }); },
+      'Added: ' + name + (demo ? ', as demo data.' : ', as unverified.'), loadPlaces, function () { S.form = null; }, 'A fishing area with this code already exists.');
+}
+
+function pick(id, list, value) { return h('select', { id: id }, list.map(function (c) { return h('option', { value: c[0], selected: c[0] === value, text: c[1] }); })); }
+function countyPick(id, optional) {
+  var list = (S.counties || []).map(function (c) { return [c.code, c.name]; });
+  return pick(id, optional ? [['', 'Not set']].concat(list) : list, optional ? '' : (list[0] || [''])[0]);
+}
+function demoBox(id) {
+  return h('div', { 'class': 'checkrow' }, h('input', { type: 'checkbox', id: id, checked: demoDefault() }),
+    h('label', { 'for': id, text: 'This is test or demonstration data, not a real record' }));
+}
+function statusBadges(x) {
+  var st = STATUS[x.is_demo ? 'demo' : x.data_status] || null;
+  return [st ? h('span', { 'class': 'badge ' + st[1], text: st[0] }) : null, x.status && x.status !== 'active' ? h('span', { 'class': 'badge wait', text: x.status }) : null];
+}
+function formActions(id, text) {
+  return h('div', { 'class': 'actions' }, submitBtn(id, text, 'Saving...'),
+    h('button', { type: 'button', 'class': 'sec', text: 'Cancel', onclick: function () { S.form = null; S.flash = null; render(); } }));
+}
+function addButton(id, text, form) {
+  return h('button', { 'class': 'sec small', id: id, text: text, onclick: function () { S.form = form; S.orgOpen = null; S.flash = null; render(); } });
+}
+function tabsBar() {
+  var t = [['species', 'Species'], ['orgs', 'Organisations'], ['places', 'Places and gear']];
+  return h('div', { 'class': 'tabs' }, t.map(function (x) {
+    return h('button', { id: 'tab-' + x[0], 'class': S.tab === x[0] ? 'on' : '', text: x[1], onclick: function () { go(x[0]); } });
+  }));
+}
+function membersPanel(o) {
+  var rows = S.members[o.id], own = adminOf(o.id);
+  var roles = own ? ROLES.filter(function (r) { return r[0] !== 'platform_admin'; }) : ROLES.filter(function (r) { return r[0] === 'org_admin'; });
+  var me = S.ctx.user_id;
+  return h('div', { 'class': 'hist', id: 'members' },
+    h('h3', { text: 'People' }),
+    own ? null : h('p', { 'class': 'muted', text: 'You are not an administrator of this organisation, so you see and appoint only its administrators. They manage their own clerks and verifiers.' }),
+    h('div', { 'class': 'list' }, !rows ? h('div', { 'class': 'muted', text: 'Loading...' }) : !rows.length ? h('div', { 'class': 'muted', text: 'Nobody yet.' })
+      : rows.map(function (m) {
+          var key = m.user_id + ':' + m.role, self = m.user_id === me && m.role === 'org_admin';
+          return h('div', { 'class': 'item', 'data-member': m.email + ':' + m.role },
+            h('div', { 'class': 'row' },
+              h('div', {}, h('strong', { text: m.email }), h('div', {}, h('span', { 'class': 'badge ' + (m.active ? 'ok' : ''), text: lbl(ROLES, m.role) + (m.active ? '' : ' - removed') }))),
+              m.active && !self && m.role !== 'platform_admin'
+                ? h('button', { type: 'button', 'class': 'danger small act-remove', 'data-label': 'Remove', 'data-busy': 'Saving...', disabled: S.busy,
+                                text: S.removing === key ? 'Tap again to remove' : 'Remove', onclick: function () { doRemoveMember(m); } }) : null));
+        })),
+    h('form', { id: 'member-form', onsubmit: doAddMember },
+      h('div', { 'class': 'grid2' },
+        h('div', {}, field('Email address of the person', h('input', { id: 'mem-email', type: 'email', maxlength: '200' }))),
+        h('div', {}, field('Role', pick('mem-role', roles, roles[0][0])))),
+      h('p', { 'class': 'muted', text: 'The person must already have a sign-in. A person can hold more than one role; the one who enters a record can never verify it.' }),
+      h('div', { 'class': 'actions' }, submitBtn('mem-save', 'Give this role', 'Saving...'))));
+}
+function orgCard(o) {
+  var can = isAdmin() || adminOf(o.id);
+  return h('div', { 'class': 'card', 'data-org': o.name },
+    h('div', { 'class': 'row' },
+      h('div', {},
+        h('div', { 'class': 'name', text: o.name }),
+        h('div', {}, h('span', { 'class': 'badge', text: lbl(ORG_TYPES, o.org_type) }), o.is_demo ? h('span', { 'class': 'badge', text: 'Demo' }) : null,
+          o.status !== 'active' ? h('span', { 'class': 'badge wait', text: o.status }) : null),
+        h('div', { 'class': 'muted', text: countyName(o.county_id) + (o.registration_no ? ' - registration ' + o.registration_no : '') })),
+      can ? h('button', { 'class': 'sec small act-people', text: S.orgOpen === o.id ? 'Close' : 'People', onclick: function () { openMembers(o.id); } }) : null),
+    S.orgOpen === o.id ? membersPanel(o) : null);
+}
+function viewOrgs() {
+  if (!S.orgs) return [h('div', { 'class': 'card muted', text: 'Loading...' })];
+  var types = ORG_TYPES.filter(function (t) { return t[0] !== 'platform_operator'; });
+  return [h('h2', { text: 'Organisations' }), flash(),
+    !isAdmin() ? h('div', { 'class': 'msg info', id: 'orgs-readonly', text: 'Only the platform administrator can register an organisation. You can manage the people of organisations you administer.' })
+    : S.form === 'org' ? h('form', { 'class': 'card', id: 'org-form', onsubmit: doRegisterOrg },
+        h('h3', { text: 'Register an organisation' }),
+        h('div', { 'class': 'grid2' },
+          h('div', {}, field('Name', h('input', { id: 'org-name', maxlength: '120' }))),
+          h('div', {}, field('Type', pick('org-type', types, 'bmu')))),
+        h('div', { 'class': 'grid2' },
+          h('div', {}, field('County', countyPick('org-county', true))),
+          h('div', {}, field('Registration number (optional)', h('input', { id: 'org-reg', maxlength: '60' })))),
+        field('Email address of its administrator', h('input', { id: 'org-admin', type: 'email', maxlength: '200' })),
+        h('p', { 'class': 'muted', text: 'The administrator must already have a sign-in. They add their own clerks and verifiers.' }),
+        demoBox('org-demo'), formActions('org-save', 'Register organisation'))
+    : h('div', { 'class': 'card' }, h('button', { 'class': 'big', id: 'btn-org', text: 'Register an organisation', onclick: function () { S.form = 'org'; S.orgOpen = null; S.orgCid = null; S.flash = null; render(); } })),
+    h('div', { 'class': 'muted', id: 'org-count', style: 'margin:0 0 8px', text: S.orgs.length + ' organisations' }),
+    h('div', { id: 'org-list' }, S.orgs.map(orgCard))];
+}
+function section(id, title, addId, addText, form, formNode, rows, empty) {
+  return h('div', { 'class': 'card', id: id },
+    h('div', { 'class': 'row' }, h('h3', { style: 'margin:0', text: title + ' (' + rows.length + ')' }), isAdmin() && S.form !== form ? addButton(addId, addText, form) : null),
+    S.form === form ? formNode() : null,
+    h('div', { 'class': 'list', style: 'margin-top:8px' }, rows.length ? rows : h('div', { 'class': 'muted', text: empty })));
+}
+function viewPlaces() {
+  if (!S.sites) return [h('div', { 'class': 'card muted', text: 'Loading...' })];
+  var bmus = [['', 'No BMU set']].concat(S.orgs.filter(function (o) { return o.org_type === 'bmu'; }).map(function (o) { return [o.id, o.name]; }));
+  return [h('h2', { text: 'Places and gear' }), flash(),
+    isAdmin() ? null : h('div', { 'class': 'msg info', id: 'places-readonly', text: 'You can read these lists. Only the platform administrator can add to them.' }),
+    section('sites', 'Landing sites', 'btn-site', 'Add a landing site', 'site', function () {
+      return h('form', { id: 'site-form', onsubmit: doAddSite },
+        h('div', { 'class': 'grid2' },
+          h('div', {}, field('Name of the landing site', h('input', { id: 'site-name', maxlength: '120' }))),
+          h('div', {}, field('County', countyPick('site-county', false)))),
+        field('Beach Management Unit responsible (optional)', pick('site-bmu', bmus, '')),
+        h('p', { 'class': 'muted', text: 'Saved as unverified until it is checked against the official register. Coordinates are not entered here.' }),
+        demoBox('site-demo'), formActions('site-save', 'Save landing site'));
+    }, S.sites.map(function (x) {
+      return h('div', { 'class': 'item', 'data-site': x.name }, h('strong', { text: x.name }), ' ', statusBadges(x),
+        h('div', { 'class': 'muted', text: countyName(x.county_id) + (x.bmu_organization_id ? ' - ' + orgName(x.bmu_organization_id) : '') }));
+    }), 'No landing sites yet.'),
+    section('gear', 'Gear types', 'btn-gear', 'Add a gear type', 'gear', function () {
+      return h('form', { id: 'gear-form', onsubmit: doAddGear },
+        h('div', { 'class': 'grid2' },
+          h('div', {}, field('Short code, for example HL', h('input', { id: 'gear-code', maxlength: '12' }))),
+          h('div', {}, field('Name, for example Handline', h('input', { id: 'gear-name', maxlength: '80' })))),
+        demoBox('gear-demo'), formActions('gear-save', 'Save gear type'));
+    }, S.gear.map(function (x) {
+      return h('div', { 'class': 'item', 'data-gear': x.code }, h('strong', { text: x.name }), ' ', h('span', { 'class': 'badge', text: x.code }), x.is_demo ? h('span', { 'class': 'badge', text: 'Demo' }) : null);
+    }), 'No gear types yet.'),
+    section('areas', 'Fishing areas', 'btn-area', 'Add a fishing area', 'area', function () {
+      return h('form', { id: 'area-form', onsubmit: doAddArea },
+        h('div', { 'class': 'grid2' },
+          h('div', {}, field('Short code', h('input', { id: 'area-code', maxlength: '20' }))),
+          h('div', {}, field('Name', h('input', { id: 'area-name', maxlength: '120' })))),
+        h('div', { 'class': 'grid2' },
+          h('div', {}, field('County', countyPick('area-county', true))),
+          h('div', {}, field('Kind of water', pick('area-type', AREA_TYPES, 'inshore')))),
+        h('p', { 'class': 'muted', text: 'A named area only. No boundary or coordinates are stored from this form.' }),
+        demoBox('area-demo'), formActions('area-save', 'Save fishing area'));
+    }, S.areas.map(function (x) {
+      return h('div', { 'class': 'item', 'data-area': x.code }, h('strong', { text: x.name }), ' ', h('span', { 'class': 'badge', text: x.code }), statusBadges(x),
+        h('div', { 'class': 'muted', text: lbl(AREA_TYPES, x.area_type) + ' - ' + countyName(x.county_id) }));
+    }), 'No fishing areas yet.')];
+}
 function render() {
   var v = $('#view'), u = $('#hdr-user');
   clear(v); clear(u);
   $('#hdr-title').textContent = 'CatchTrace' + (S.cfg && S.cfg.env !== 'production' ? ' - ' + String(S.cfg.env || 'test').toUpperCase() : '');
   if (!S.session) { add(v, viewLogin()); return; }
   add(u, h('button', { id: 'btn-signout', text: 'Sign out', onclick: doSignOut }));
-  add(v, viewSpecies());
+  add(v, tabsBar());
+  if (S.tab !== 'species' && S.loading) { add(v, h('div', { 'class': 'card muted', text: 'Loading...' })); return; }
+  add(v, S.tab === 'orgs' ? viewOrgs() : S.tab === 'places' ? viewPlaces() : viewSpecies());
 }
 
 // ------------------------------------------------------------------ boot
