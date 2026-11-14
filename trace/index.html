@@ -50,6 +50,10 @@ function show(html) { view.innerHTML = html; }
 function notFound() {
   show('<div class="msg" id="not-found"><h1>Code not recognised</h1><p>This code is not on file, or it has been withdrawn. Check that the whole code was scanned, or ask the seller.</p></div>');
 }
+function busy() {
+  show('<div class="msg" id="busy"><h1>Too many checks just now</h1><p>A lot of codes have been checked from this connection in the last minute. Wait a minute, then try again.</p><p><button id="retry" style="font:inherit;padding:10px 16px">Try again</button></p></div>');
+  document.getElementById('retry').addEventListener('click', function () { location.reload(); });
+}
 function unavailable() {
   show('<div class="msg" id="unavailable"><h1>Could not check this code</h1><p>There was a problem reaching the service. Check your connection and try again.</p><p><button id="retry" style="font:inherit;padding:10px 16px">Try again</button></p></div>');
   document.getElementById('retry').addEventListener('click', function () { location.reload(); });
@@ -111,9 +115,13 @@ fetch('config.json', { cache: 'no-cache' }).then(function (r) { return r.json();
     headers: { apikey: cfg.key, 'Content-Type': 'application/json', 'Content-Profile': 'catchtrace' },
     body: JSON.stringify({ p_token: m[1].toLowerCase() }) });
 }).then(function (r) {
-  if (!r.ok) throw new Error('http ' + r.status);
-  return r.json();
-}).then(function (d) { if (d && d.found) render(d); else notFound(); }, unavailable);
+  if (r.ok) return r.json();
+  // Over the request limit the service answers 429 (database code PT429).
+  return r.json().then(function (j) { return j; }, function () { return null; }).then(function (j) {
+    if (r.status === 429 || (j && j.code === 'PT429')) return { busy: true };
+    throw new Error('http ' + r.status);
+  });
+}).then(function (d) { if (d && d.busy) busy(); else if (d && d.found) render(d); else notFound(); }, unavailable);
 })();
 </script>
 </body>
