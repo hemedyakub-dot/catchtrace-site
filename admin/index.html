@@ -53,6 +53,11 @@ button.danger{background:#fff;color:#a32626;border:1px solid #a32626}
 input[type=checkbox]{width:24px;height:24px;min-height:0;padding:0;flex:none}
 .checkrow{display:flex;gap:10px;align-items:center;margin-top:12px}
 .checkrow label{margin:0}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #e6eaee;white-space:nowrap}
+th{font-size:12px;color:#5b6875}
+td.n,th.n{text-align:right}
 </style>
 </head>
 <body>
@@ -77,7 +82,8 @@ var ROLES = [['org_admin', 'Administrator'], ['clerk', 'Clerk (enters records)']
 var AREA_TYPES = [['inshore', 'Inshore'], ['reef', 'Reef'], ['channel', 'Channel'], ['offshore', 'Offshore'], ['other', 'Other']];
 var OP_SOURCE = 'Added by the operator in the administration page';
 var S = { cfg: null, session: null, ctx: null, species: [], history: {}, q: '', open: null, adding: false, flash: null, busy: false, loading: false,
-          tab: 'species', orgs: null, counties: null, sites: null, gear: null, areas: null, members: {}, orgOpen: null, form: null, removing: null, orgCid: null };
+          tab: 'species', orgs: null, counties: null, sites: null, gear: null, areas: null, members: {}, orgOpen: null, form: null, removing: null, orgCid: null,
+          corr: null, corrRefs: {}, corrCatch: null, corrCid: null, rejecting: null, approving: null, report: null, audit: null };
 
 // ------------------------------------------------------------------- dom
 // Everything shown comes through text nodes; no markup is built from data.
@@ -221,7 +227,8 @@ function doSignIn(ev) {
 function doSignOut() {
   saveSession(null);
   S.ctx = null; S.species = []; S.history = {}; S.open = null; S.adding = false; S.flash = null; S.q = ''; S.tab = 'species';
-  S.orgs = null; S.sites = null; S.gear = null; S.areas = null; S.members = {}; S.orgOpen = null; S.form = null; S.removing = null; render();
+  S.orgs = null; S.sites = null; S.gear = null; S.areas = null; S.members = {}; S.orgOpen = null; S.form = null; S.removing = null;
+  S.corr = null; S.corrRefs = {}; S.corrCatch = null; S.report = null; S.audit = null; render();
 }
 function doAdd(ev) {
   ev.preventDefault();
@@ -388,7 +395,9 @@ function go(tab) {
   S.tab = tab; S.open = null; S.adding = false; S.form = null; S.orgOpen = null; S.removing = null; S.flash = null;
   if (tab === 'species') return render();
   S.loading = true; render();
-  (tab === 'orgs' ? loadOrgs() : loadPlaces()).then(function () { S.loading = false; render(); }, function (e) { S.loading = false; fail(e, true); });
+  S.corrCatch = null; S.rejecting = null; S.approving = null;
+  if (tab === 'reports') { S.loading = false; return render(); }
+  (tab === 'orgs' ? loadOrgs() : tab === 'corr' ? loadCorr() : loadPlaces()).then(function () { S.loading = false; render(); }, function (e) { S.loading = false; fail(e, true); });
 }
 // Run a write, reload what it changed, redraw with a confirmation. After a
 // connection problem the list is reloaded so it shows whether it was saved.
@@ -483,7 +492,7 @@ function addButton(id, text, form) {
   return h('button', { 'class': 'sec small', id: id, text: text, onclick: function () { S.form = form; S.orgOpen = null; S.flash = null; render(); } });
 }
 function tabsBar() {
-  var t = [['species', 'Species'], ['orgs', 'Organisations'], ['places', 'Places and gear']];
+  var t = [['species', 'Species'], ['orgs', 'Organisations'], ['places', 'Places and gear'], ['corr', 'Corrections'], ['reports', 'Reports']];
   return h('div', { 'class': 'tabs' }, t.map(function (x) {
     return h('button', { id: 'tab-' + x[0], 'class': S.tab === x[0] ? 'on' : '', text: x[1], onclick: function () { go(x[0]); } });
   }));
@@ -591,6 +600,178 @@ function viewPlaces() {
         h('div', { 'class': 'muted', text: lbl(AREA_TYPES, x.area_type) + ' - ' + countyName(x.county_id) }));
     }), 'No fishing areas yet.')];
 }
+
+// ================================================== corrections and reports
+var CFIELD = { weight_kg: 'Weight, kg', species_id: 'Species', quantity_count: 'Number of pieces', condition: 'Condition', landed_at: 'Landing time',
+               landing_site_id: 'Landing site', departed_at: 'Departure time', crew_size_est: 'Crew size', gear_type_id: 'Gear', fishing_area_id: 'Fishing area' };
+var CSUBJECT = { catch_records: 'Catch', landing_events: 'Landing', fishing_trips: 'Trip' };
+var CONDITIONS = [['live', 'Live'], ['fresh', 'Fresh'], ['iced', 'Iced'], ['frozen', 'Frozen'], ['damaged', 'Damaged'], ['other', 'Other']];
+var CATCH_FIELDS = [['weight_kg', 'Weight, kg'], ['species_id', 'Species'], ['quantity_count', 'Number of pieces'], ['condition', 'Condition']];
+function byId(list, id) { return (list || []).filter(function (x) { return x.id === id; })[0]; }
+function speciesLabel(id) { var x = byId(S.species, id); return x ? x.common_name_en + (x.common_name_sw ? ' / ' + x.common_name_sw : '') : 'Unknown species'; }
+function showValue(field, v) {
+  if (v === null || v === undefined || v === '') return '(none)';
+  var x;
+  if (field === 'species_id') return speciesLabel(v);
+  if (field === 'landing_site_id') { x = byId(S.sites, v); return x ? x.name : 'Unknown landing site'; }
+  if (field === 'gear_type_id') { x = byId(S.gear, v); return x ? x.name : 'Unknown gear'; }
+  if (field === 'fishing_area_id') { x = byId(S.areas, v); return x ? x.name : 'Unknown fishing area'; }
+  if (field === 'landed_at' || field === 'departed_at') return when(v);
+  if (field === 'condition') return lbl(CONDITIONS, v);
+  return String(v);
+}
+function loadCorr() {
+  return Promise.all([loadPlaces(),
+    get('correction_requests', 'select=id,subject_table,subject_id,organization_id,field_name,old_value,new_value,reason,requires_official,status,requested_by,requested_at,decided_at,decision_note&order=requested_at.desc')
+  ]).then(function (r) {
+    S.corr = r[1] || [];
+    var ids = S.corr.filter(function (c) { return c.subject_table === 'catch_records' && !S.corrRefs[c.subject_id]; }).map(function (c) { return c.subject_id; });
+    ids = ids.filter(function (id, i) { return ids.indexOf(id) === i; });
+    if (!ids.length) return null;
+    return get('catch_records', 'select=id,catch_ref&id=in.(' + ids.join(',') + ')').then(function (rows) { (rows || []).forEach(function (c) { S.corrRefs[c.id] = c.catch_ref; }); });
+  });
+}
+function canDecide(c) {
+  return isAdmin() || (S.ctx.memberships || []).some(function (m) { return m.organization_id === c.organization_id && (m.role === 'org_admin' || m.role === 'verifier'); }) || S.ctx.is_authority;
+}
+function doFindCatch(ev) {
+  ev.preventDefault();
+  if (S.busy) return;
+  var ref = $('#corr-ref').value.trim().toUpperCase();
+  if (!ref) return setFlash('err', 'Type the catch reference, for example CAT-261114-000001.');
+  setFlash(null); setBusy(true);
+  get('catch_records', 'select=id,catch_ref,species_id,weight_kg,quantity_count,condition,verification_level,status,organization_id&catch_ref=eq.' + encodeURIComponent(ref)).then(function (rows) {
+    S.busy = false;
+    if (!rows || !rows.length) { setBusy(false); return setFlash('err', 'No catch with that reference is visible to this account.'); }
+    S.corrCatch = rows[0]; S.corrCid = uuid(); S.flash = null; render();
+  }, function (e) { fail(e); });
+}
+function valueControl(field, c) {
+  if (field === 'species_id') return h('select', { id: 'corr-new' }, S.species.filter(function (x) { return x.id !== c.species_id; }).map(function (x) { return h('option', { value: x.id, text: speciesLabel(x.id) }); }));
+  if (field === 'condition') return pick('corr-new', CONDITIONS.filter(function (x) { return x[0] !== c.condition; }), '');
+  return h('input', { id: 'corr-new', inputmode: field === 'weight_kg' ? 'decimal' : 'numeric' });
+}
+function paintValueControl() {
+  var box = $('#corr-new-box'); if (!box || !S.corrCatch) return;
+  clear(box); add(box, field('Correct value', valueControl($('#corr-field').value, S.corrCatch)));
+}
+function doRequestCorr(ev) {
+  ev.preventDefault();
+  var c = S.corrCatch, f = $('#corr-field').value, v = String($('#corr-new').value).trim().replace(',', '.'), reason = $('#corr-reason').value.trim();
+  if (!v) return setFlash('err', 'Enter the correct value.');
+  if ((f === 'weight_kg' && !(parseFloat(v) > 0)) || (f === 'quantity_count' && !/^\d+$/.test(v))) return setFlash('err', 'Enter the correct value as a number.');
+  if (reason.length < 10) return setFlash('err', 'Explain the reason in a few words (at least 10 letters).');
+  act(function () { return rpc('request_correction', { p_subject_table: 'catch_records', p_subject_id: c.id, p_field: f, p_new_value: v, p_reason: reason, p_client_id: S.corrCid }); },
+      'Correction requested for ' + c.catch_ref + '. Someone else must now decide it.', loadCorr, function () { S.corrCatch = null; S.corrCid = null; },
+      'A correction for this field is already waiting for a decision.');
+}
+function doApprove(c) {
+  if (S.approving !== c.id) { S.approving = c.id; S.rejecting = null; S.flash = null; return render(); }
+  act(function () { return rpc('decide_correction', { p_correction_id: c.id, p_approve: true, p_note: null }); },
+      'Correction approved and applied. The record must be verified again.', loadCorr, function () { S.approving = null; });
+}
+function doReject(ev, c) {
+  ev.preventDefault();
+  var note = $('#rej-note').value.trim();
+  if (note.length < 3) return setFlash('err', 'Say briefly why the correction is rejected.');
+  act(function () { return rpc('decide_correction', { p_correction_id: c.id, p_approve: false, p_note: note }); },
+      'Correction rejected. The record is unchanged.', loadCorr, function () { S.rejecting = null; });
+}
+function corrCard(c) {
+  var subject = CSUBJECT[c.subject_table] + (c.subject_table === 'catch_records' && S.corrRefs[c.subject_id] ? ' ' + S.corrRefs[c.subject_id] : '');
+  var mine = c.requested_by === S.ctx.user_id, pending = c.status === 'pending';
+  return h('div', { 'class': 'card', 'data-corr': c.id },
+    h('div', { 'class': 'name', text: subject + ' - ' + (CFIELD[c.field_name] || c.field_name) }),
+    h('div', {}, h('span', { 'class': 'badge ' + (pending ? 'wait' : c.status === 'approved' ? 'ok' : ''), text: pending ? 'Waiting for a decision' : c.status === 'approved' ? 'Approved' : 'Rejected' }),
+      c.requires_official ? h('span', { 'class': 'badge wait', text: 'Needs a fisheries authority' }) : null),
+    h('div', { 'class': 'corr-change', text: showValue(c.field_name, c.old_value) + '  ->  ' + showValue(c.field_name, c.new_value) }),
+    h('div', { 'class': 'muted', text: 'Reason: ' + c.reason }),
+    h('div', { 'class': 'muted', text: orgName(c.organization_id) + ' - asked ' + when(c.requested_at) + (c.decided_at ? ' - decided ' + when(c.decided_at) + (c.decision_note ? ' - ' + c.decision_note : '') : '') }),
+    !pending ? null
+    : mine ? h('div', { 'class': 'msg info', style: 'margin:10px 0 0', text: 'You asked for this correction, so someone else must decide it.' })
+    : !canDecide(c) ? null
+    : S.rejecting === c.id ? h('form', { id: 'reject-form', onsubmit: function (ev) { doReject(ev, c); } },
+        field('Why is it rejected?', h('input', { id: 'rej-note', maxlength: '200' })),
+        h('div', { 'class': 'actions' }, submitBtn('rej-save', 'Reject correction', 'Saving...', 'danger'),
+          h('button', { type: 'button', 'class': 'sec', text: 'Back', onclick: function () { S.rejecting = null; S.flash = null; render(); } })))
+    : [h('p', { 'class': 'muted', text: 'Approving changes the record and withdraws its verifications, so it must be verified again.' }),
+       h('div', { 'class': 'actions' },
+         h('button', { type: 'button', 'class': 'act-approve', 'data-label': 'Approve', 'data-busy': 'Saving...', disabled: S.busy, text: S.approving === c.id ? 'Tap again to approve' : 'Approve', onclick: function () { doApprove(c); } }),
+         h('button', { type: 'button', 'class': 'danger act-reject', text: 'Reject', onclick: function () { S.rejecting = c.id; S.approving = null; S.flash = null; render(); } }))]);
+}
+function viewCorr() {
+  if (!S.corr) return [h('div', { 'class': 'card muted', text: 'Loading...' })];
+  var c = S.corrCatch, pending = S.corr.filter(function (x) { return x.status === 'pending'; }), done = S.corr.filter(function (x) { return x.status !== 'pending'; });
+  var ask = !c
+    ? h('form', { 'class': 'card', id: 'find-form', onsubmit: doFindCatch },
+        h('h3', { text: 'Ask for a correction to a catch record' }),
+        field('Catch reference', h('input', { id: 'corr-ref', maxlength: '40', placeholder: 'CAT-...' })),
+        h('p', { 'class': 'muted', text: 'A clerk or administrator of the organisation that holds the record can ask. A different person decides.' }),
+        h('div', { 'class': 'actions' }, submitBtn('corr-find', 'Find the catch', 'Looking...')))
+    : h('form', { 'class': 'card', id: 'corr-form', onsubmit: doRequestCorr },
+        h('h3', { text: 'Correction to ' + c.catch_ref }),
+        h('div', { id: 'corr-current', 'class': 'muted', text: 'Now recorded: ' + speciesLabel(c.species_id) + ' - ' + Number(c.weight_kg) + ' kg - ' +
+          (c.quantity_count === null ? 'pieces not counted' : c.quantity_count + ' pieces') + ' - ' + lbl(CONDITIONS, c.condition) + ' - ' + lbl([], c.verification_level) }),
+        h('div', { 'class': 'grid2' },
+          h('div', {}, field('What is wrong', h('select', { id: 'corr-field', onchange: paintValueControl }, CATCH_FIELDS.map(function (x) { return h('option', { value: x[0], text: x[1] }); })))),
+          h('div', { id: 'corr-new-box' }, field('Correct value', valueControl('weight_kg', c)))),
+        field('Reason', h('input', { id: 'corr-reason', maxlength: '300', placeholder: 'For example: scale was read wrongly, re-weighed at the site' })),
+        h('div', { 'class': 'actions' }, submitBtn('corr-save', 'Ask for this correction', 'Saving...'),
+          h('button', { type: 'button', 'class': 'sec', text: 'Cancel', onclick: function () { S.corrCatch = null; S.flash = null; render(); } })));
+  return [h('h2', { text: 'Corrections' }), flash(), ask,
+    h('h3', { text: 'Waiting for a decision (' + pending.length + ')' }),
+    h('div', { id: 'corr-pending' }, pending.length ? pending.map(corrCard) : h('div', { 'class': 'card muted', text: 'Nothing is waiting.' })),
+    h('h3', { text: 'Decided (' + done.length + ')' }),
+    h('div', { id: 'corr-done' }, done.length ? done.map(corrCard) : h('div', { 'class': 'card muted', text: 'No corrections have been decided yet.' }))];
+}
+function today() { try { return new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Nairobi' }); } catch (e) { return new Date().toISOString().slice(0, 10); } }
+function doReport(ev) {
+  ev.preventDefault();
+  if (S.busy) return;
+  var from = $('#rep-from').value, to = $('#rep-to').value, demo = $('#rep-demo').checked;
+  if (!from || !to || from > to) return setFlash('err', 'Choose a start date and an end date, with the start first.');
+  setFlash(null); setBusy(true);
+  rpc('analytics_catches', { p_from: from, p_to: to, p_include_demo: demo }).then(function (r) { S.busy = false; S.report = r; S.flash = null; render(); }, function (e) { fail(e); });
+}
+function doAudit() {
+  if (S.busy) return;
+  setFlash(null); setBusy(true);
+  rpc('verify_audit_chain').then(function (r) { S.busy = false; S.audit = r; S.flash = null; render(); }, function (e) { fail(e); });
+}
+function reportTable(r) {
+  var cols = [['month', 'Month'], ['county', 'County'], ['landing_site', 'Landing site'], ['species', 'Species'], ['catch_records', 'Records', 1], ['vessels', 'Vessels', 1],
+              ['reported_kg', 'Reported kg', 1], ['community_verified_kg', 'Community verified kg', 1], ['document_verified_kg', 'Document verified kg', 1],
+              ['officially_verified_kg', 'Officially verified kg', 1], ['unverified_kg', 'Not verified kg', 1], ['entered_supply_chain_kg', 'Sold on kg', 1]];
+  var rows = r.rows || [], sum = function (k) { return Math.round(rows.reduce(function (a, x) { return a + Number(x[k] || 0); }, 0) * 1000) / 1000; };
+  return h('div', { 'class': 'card', id: 'report' },
+    h('div', { 'class': 'msg info', id: 'rep-basis', text: r.basis + ' Covers ' + r.scope + ', ' + r.from + ' to ' + r.to + (r.includes_demo_data ? ', INCLUDING test and demonstration data.' : ', excluding test and demonstration data.') }),
+    !rows.length ? h('div', { 'class': 'muted', id: 'rep-empty', text: 'No landings were recorded in this period.' })
+    : [h('div', { id: 'rep-totals' }, h('strong', { text: sum('catch_records') + ' catch records, ' + sum('reported_kg') + ' kg reported' }),
+         h('div', { 'class': 'muted', text: 'Officially verified ' + sum('officially_verified_kg') + ' kg - document verified ' + sum('document_verified_kg') + ' kg - community verified ' +
+           sum('community_verified_kg') + ' kg - not verified ' + sum('unverified_kg') + ' kg. A catch can hold more than one kind of verification, so these do not add up to the total.' })),
+       h('div', { 'class': 'scroll' }, h('table', {},
+         h('thead', {}, h('tr', {}, cols.map(function (c) { return h('th', { 'class': c[2] ? 'n' : '', text: c[1] }); }))),
+         h('tbody', {}, rows.map(function (x) { return h('tr', {}, cols.map(function (c) { return h('td', { 'class': c[2] ? 'n' : '', text: c[2] ? String(Number(x[c[0]])) : String(x[c[0]]) }); })); }))))]);
+}
+function viewReports() {
+  var t = today();
+  return [h('h2', { text: 'Reports' }), flash(),
+    h('form', { 'class': 'card', id: 'report-form', onsubmit: doReport },
+      h('h3', { text: 'Landings recorded' }),
+      h('div', { 'class': 'grid2' },
+        h('div', {}, field('From', h('input', { id: 'rep-from', type: 'date', value: S.report ? S.report.from : t.slice(0, 8) + '01' }))),
+        h('div', {}, field('To', h('input', { id: 'rep-to', type: 'date', value: S.report ? S.report.to : t })))),
+      h('div', { 'class': 'checkrow' }, h('input', { type: 'checkbox', id: 'rep-demo', checked: S.report ? S.report.includes_demo_data : demoDefault() }),
+        h('label', { 'for': 'rep-demo', text: 'Include test and demonstration data' })),
+      h('div', { 'class': 'actions' }, submitBtn('rep-go', 'Show report', 'Loading...'))),
+    S.report ? reportTable(S.report) : null,
+    !isAdmin() ? null : h('div', { 'class': 'card', id: 'audit' },
+      h('h3', { text: 'Audit log' }),
+      h('p', { 'class': 'muted', text: 'Every change is written to a log in which each entry is sealed to the one before it. This check re-reads the whole log and confirms nothing has been altered or removed.' }),
+      S.audit ? h('div', { 'class': 'msg ' + (S.audit.ok ? 'ok' : 'err'), id: 'audit-result', text: S.audit.ok ? 'Audit log intact: ' + S.audit.rows_checked + ' entries checked.'
+        : 'The audit log FAILED its check. Do not rely on the records until this is investigated. Details: ' + JSON.stringify(S.audit) }) : null,
+      h('div', { 'class': 'actions' }, h('button', { type: 'button', id: 'audit-go', 'data-label': 'Check the audit log now', 'data-busy': 'Checking...', disabled: S.busy, text: 'Check the audit log now', onclick: doAudit })))];
+}
 function render() {
   var v = $('#view'), u = $('#hdr-user');
   clear(v); clear(u);
@@ -599,7 +780,7 @@ function render() {
   add(u, h('button', { id: 'btn-signout', text: 'Sign out', onclick: doSignOut }));
   add(v, tabsBar());
   if (S.tab !== 'species' && S.loading) { add(v, h('div', { 'class': 'card muted', text: 'Loading...' })); return; }
-  add(v, S.tab === 'orgs' ? viewOrgs() : S.tab === 'places' ? viewPlaces() : viewSpecies());
+  add(v, S.tab === 'orgs' ? viewOrgs() : S.tab === 'places' ? viewPlaces() : S.tab === 'corr' ? viewCorr() : S.tab === 'reports' ? viewReports() : viewSpecies());
 }
 
 // ------------------------------------------------------------------ boot
