@@ -83,7 +83,8 @@ var VERIF = { unverified: ['Not verified', 'wait'], community_verified: ['Commun
               document_verified: ['Document verified', 'ok'], officially_verified: ['Officially verified', 'ok'] };
 var S = { cfg: null, session: null, ctx: null, orgs: [], org: null, tab: 'purchases', batchId: null, species: {}, orgNames: {},
           txns: [], catches: {}, batches: [], detail: null, draft: null, picked: {}, refusing: null, withdrawing: null,
-          cids: {}, login: { mode: 'password', email: '' }, flash: null, busy: false, loading: false };
+          cids: {}, login: { mode: 'password', email: '' }, flash: null, busy: false, loading: false,
+          supplies: [], sites: [], orgList: [], supplyForm: false, voiding: null };
 
 // ------------------------------------------------------------------- dom
 // Everything shown comes through text nodes; no markup is built from data.
@@ -221,8 +222,10 @@ function loadBase() {
   return Promise.all([
     rpc('my_context'),
     get('species', 'select=id,common_name_en,common_name_sw'),
-    get('organizations', 'select=id,name')
+    get('organizations', 'select=id,name,org_type,home_landing_site_id,status'),
+    get('landing_sites', 'select=id,name,status&order=name.asc')
   ]).then(function (r) {
+    S.orgList = r[2] || []; S.sites = r[3] || [];
     S.ctx = r[0]; S.species = {}; S.orgNames = {};
     (r[1] || []).forEach(function (x) { S.species[x.id] = x; });
     (r[2] || []).forEach(function (x) { S.orgNames[x.id] = x.name; });
@@ -238,12 +241,13 @@ function loadBase() {
   });
 }
 function loadOrg() {
-  if (!S.org) { S.txns = []; S.batches = []; S.catches = {}; return Promise.resolve(); }
+  if (!S.org) { S.txns = []; S.batches = []; S.catches = {}; S.supplies = []; return Promise.resolve(); }
   return Promise.all([
     get('transactions', 'select=id,txn_ref,catch_record_id,seller_organization_id,quantity_kg,unit_price_kes,total_kes,status,consumed_kg,transacted_at&buyer_organization_id=eq.' + S.org + '&status=neq.cancelled&order=transacted_at.desc'),
-    get('processing_batches', 'select=id,batch_ref,batch_type,product_form,product_name,species_id,input_kg,added_kg,output_kg,byproduct_kg,loss_kg,consumed_kg,status,processed_at,packaged_at&organization_id=eq.' + S.org + '&order=processed_at.desc')
+    get('processing_batches', 'select=id,batch_ref,batch_type,product_form,product_name,species_id,input_kg,added_kg,output_kg,byproduct_kg,loss_kg,consumed_kg,status,processed_at,packaged_at&organization_id=eq.' + S.org + '&order=processed_at.desc'),
+    get('supplier_supplies', 'select=id,supply_ref,supplier_organization_id,landing_site_id,species_id,weight_kg,received_at,batch_id,status,void_reason&organization_id=eq.' + S.org + '&order=received_at.desc')
   ]).then(function (r) {
-    S.txns = r[0] || []; S.batches = r[1] || [];
+    S.txns = r[0] || []; S.batches = r[1] || []; S.supplies = r[2] || [];
     return loadCatches(S.txns.map(function (t) { return t.catch_record_id; }));
   });
 }
@@ -258,10 +262,11 @@ function loadDetail(id) {
     get('batch_catch_links', 'select=id,catch_record_id,transaction_id,quantity_kg&batch_id=eq.' + id),
     get('distribution_records', 'select=id,dist_ref,quantity_kg,destination_type,destination_label,external_ref,status,dispatched_at,delivered_at&batch_id=eq.' + id + '&order=dispatched_at.desc'),
     get('public_traceability_tokens', 'select=id,token,status,issued_at&batch_id=eq.' + id + '&order=issued_at.asc'),
-    rpc('public_token_stats', { p_batch_id: id })
+    rpc('public_token_stats', { p_batch_id: id }),
+    rpc('trace_backward', { p_batch_id: id })
   ]).then(function (r) {
     var scans = {}; (r[3] || []).forEach(function (s) { scans[s.token_id] = s.scans; });
-    S.detail = { id: id, links: r[0] || [], dists: r[1] || [], tokens: r[2] || [], scans: scans };
+    S.detail = { id: id, links: r[0] || [], dists: r[1] || [], tokens: r[2] || [], scans: scans, trace: r[4] || {} };
     return loadCatches(S.detail.links.map(function (l) { return l.catch_record_id; }));
   });
 }
@@ -324,11 +329,11 @@ function doSignIn(ev) {
 function doSignOut() {
   saveSession(null); S.login = { mode: 'password', email: '' };
   S.ctx = null; S.orgs = []; S.org = null; S.txns = []; S.batches = []; S.catches = {}; S.detail = null; S.draft = null; S.picked = {};
-  S.batchId = null; S.cids = {}; S.flash = null; S.tab = 'purchases'; render();
+  S.batchId = null; S.cids = {}; S.flash = null; S.tab = 'purchases'; S.supplies = []; S.supplyForm = false; S.voiding = null; render();
 }
-function go(tab) { S.tab = tab; S.batchId = null; S.detail = null; S.draft = null; S.refusing = null; S.withdrawing = null; S.flash = null; render(); }
+function go(tab) { S.tab = tab; S.batchId = null; S.detail = null; S.draft = null; S.refusing = null; S.withdrawing = null; S.supplyForm = false; S.voiding = null; S.flash = null; render(); }
 function openBatch(id, keepFlash) {
-  S.tab = 'batches'; S.batchId = id; S.detail = null; S.draft = null; S.withdrawing = null; if (!keepFlash) S.flash = null; render();
+  S.tab = 'batches'; S.batchId = id; S.detail = null; S.draft = null; S.withdrawing = null; S.voiding = null; if (!keepFlash) S.flash = null; render();
   loadDetail(id).then(function () { if (S.batchId === id) render(); }, function (e) { fail(e, true); });
 }
 function doConfirm(t) { act(function () { return rpc('confirm_sale', { p_transaction_id: t.id }); }, 'Purchase ' + t.txn_ref + ' confirmed. It is now in stock.'); }
@@ -341,19 +346,28 @@ function doRefuse(ev, t) {
 function startDraft() {
   var src = S.txns.filter(function (t) { return S.picked[t.id] && t.status === 'confirmed' && left(t) > 0; });
   if (!src.length) return setFlash('err', 'Tick at least one purchase first.');
-  S.draft = { sources: src.map(function (t) { return t.id; }) }; S.flash = null; render();
+  S.draft = { sources: src.map(function (t) { return { kind: 'transaction', id: t.id }; }) }; S.flash = null; render();
+}
+// What a source of a new batch is, and how much of it is left.
+function draftSource(x) {
+  if (x.kind === 'batch') {
+    var b = S.batches.filter(function (y) { return y.id === x.id; })[0];
+    return { ref: b.batch_ref, max: Math.round((Number(b.output_kg) - Number(b.consumed_kg)) * 1000) / 1000, species: b.species_id,
+             node: h('div', {}, h('div', { 'class': 'name', text: b.product_name || b.product_form }), h('span', { 'class': 'ref', text: b.batch_ref })) };
+  }
+  var t = S.txns.filter(function (y) { return y.id === x.id; })[0], c = S.catches[t.catch_record_id];
+  return { ref: t.txn_ref, max: left(t), species: c ? c.species_id : null, node: catchLine(c) };
 }
 function doCreateBatch(ev) {
   ev.preventDefault();
-  var form = $('#nb-form').value.trim(), name = $('#nb-name').value.trim(), type = $('#nb-type').value, inputs = [], bad = null, sp = null, mixed = false;
-  S.draft.sources.forEach(function (id) {
-    var t = S.txns.filter(function (x) { return x.id === id; })[0], v = num($('#nb-kg-' + id).value);
-    if (!(v > 0) || v > left(t)) bad = t;
-    inputs.push({ transaction_id: id, kg: v });
-    var c = S.catches[t.catch_record_id], s = c ? c.species_id : null;
-    if (sp === null) sp = s; else if (sp !== s) mixed = true;
+  var form = $('#nb-form').value.trim(), name = $('#nb-name').value.trim(), type = $('#nb-type').value, inputs = [], bad = null, sp = null, mixed = false, first = true;
+  S.draft.sources.forEach(function (x) {
+    var d = draftSource(x), v = num($('#nb-kg-' + x.id).value), o = { kg: v };
+    if (!(v > 0) || v > d.max) bad = d;
+    o[x.kind === 'batch' ? 'batch_id' : 'transaction_id'] = x.id; inputs.push(o);
+    if (first) { sp = d.species; first = false; } else if (sp !== d.species) mixed = true;
   });
-  if (bad) return setFlash('err', 'Check the weight for ' + bad.txn_ref + ': it must be more than zero and no more than ' + kg(left(bad)) + '.');
+  if (bad) return setFlash('err', 'Check the weight for ' + bad.ref + ': it must be more than zero and no more than ' + kg(bad.max) + '.');
   if (!form) return setFlash('err', 'Say what the product is, for example "Whole fish, chilled" or "Fillets".');
   var a = { p_org: S.org, p_batch_type: type, p_product_form: form, p_product_name: name || null, p_species_id: mixed ? null : sp, p_inputs: inputs };
   a.p_client_id = cid('batch', a); a.p_processed_at = new Date().toISOString();
@@ -393,6 +407,37 @@ function doDispatch(ev) {
             p_recipient_org: null, p_external_system: ref ? 'manual' : null, p_external_ref: ref || null };
   a.p_client_id = cid('dist', a); a.p_dispatched_at = new Date().toISOString();
   act(function () { return rpc('record_distribution', a); }, 'Dispatch recorded.');
+}
+function suppliers() {
+  return S.orgList.filter(function (o) { return (o.org_type === 'dealer' || o.org_type === 'fishing_company') && o.status === 'active' && o.id !== S.org; });
+}
+function supplierKind(t) { return t === 'fishing_company' ? 'fishing company' : 'dealer'; }
+function nowLocal() { return new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
+function paintSupplierSite() {
+  var o = S.orgList.filter(function (x) { return x.id === $('#su-supplier').value; })[0];
+  $('#su-site').value = o && o.home_landing_site_id ? o.home_landing_site_id : '';
+}
+function doSupply(ev) {
+  ev.preventDefault();
+  var sup = $('#su-supplier').value, site = $('#su-site').value, sp = $('#su-species').value, w = num($('#su-kg').value), at = new Date($('#su-at').value);
+  if (!sup) return setFlash('err', 'Choose the dealer or fishing company.');
+  if (!site) return setFlash('err', 'Choose the landing site nearest to this supplier.');
+  if (!sp) return setFlash('err', 'Choose the species.');
+  if (!(w > 0)) return setFlash('err', 'Enter the weight in kg.');
+  if (isNaN(at.getTime())) return setFlash('err', 'Enter when the fish was received.');
+  if (at.getTime() > Date.now() + 36e5) return setFlash('err', 'The time received is in the future.');
+  var a = { p_org: S.org, p_supplier_org: sup, p_landing_site_id: site, p_species_id: sp, p_weight_kg: w, p_received_at: at.toISOString(),
+            p_product_form: $('#su-form').value.trim() || null, p_declared_origin: $('#su-origin').value.trim() || null, p_document_ref: $('#su-doc').value.trim() || null };
+  a.p_client_id = cid('supply', a);
+  act(function () { return rpc('record_supply', a); }, 'Supply recorded and in stock. It is tied to ' + (S.orgNames[sup] || 'the supplier') + '.',
+      function (res) { S.supplyForm = false; S.tab = 'batches'; S.batchId = res.batch_id; });
+}
+function doVoid(ev, u) {
+  ev.preventDefault();
+  var reason = $('#void-reason').value.trim();
+  if (reason.length < 3) return setFlash('err', 'Say briefly why this supply is being withdrawn.');
+  act(function () { return rpc('void_supply', { p_supply_id: u.id, p_reason: reason }); }, 'Supply ' + u.supply_ref + ' withdrawn. It stays on record, with nothing left in stock.',
+      function () { S.voiding = null; }, true);
 }
 function doDelivered(d) { var at = new Date().toISOString(); act(function () { return rpc('mark_delivered', { p_distribution_id: d.id, p_delivered_at: at }); }, 'Marked as delivered: ' + d.dist_ref + '.'); }
 function doIssue() { var b = batch(); act(function () { return rpc('issue_public_token', { p_batch_id: b.id }); }, 'QR code created for ' + b.batch_ref + '.', null, true); }
@@ -507,11 +552,11 @@ function txnCard(t, mode) {
       h('div', {}, body)));
 }
 function viewDraft() {
-  var rows = S.draft.sources.map(function (id) {
-    var t = S.txns.filter(function (x) { return x.id === id; })[0], c = S.catches[t.catch_record_id];
-    return h('div', { 'class': 'item' }, catchLine(c),
-      field('Weight going into the batch, kg (up to ' + kg(left(t)) + ') - ' + t.txn_ref,
-        h('input', { id: 'nb-kg-' + id, inputmode: 'decimal', value: String(left(t)) })));
+  var rows = S.draft.sources.map(function (x) {
+    var d = draftSource(x);
+    return h('div', { 'class': 'item' }, d.node,
+      field('Weight going into the batch, kg (up to ' + kg(d.max) + ') - ' + d.ref,
+        h('input', { id: 'nb-kg-' + x.id, inputmode: 'decimal', value: String(d.max) })));
   });
   return [h('h2', { text: 'New batch' }), flash(),
     h('form', { 'class': 'card', id: 'batch-form', onsubmit: doCreateBatch },
@@ -523,11 +568,39 @@ function viewDraft() {
       h('div', { 'class': 'actions' }, btn('nb-save', 'Create batch', 'Saving...', '', null, 'submit'),
         h('button', { type: 'button', 'class': 'sec', text: 'Cancel', onclick: function () { S.draft = null; S.flash = null; render(); } })))];
 }
+function supplyCard() {
+  if (!S.supplyForm) {
+    return h('div', { 'class': 'card' }, h('button', { 'class': 'sec', id: 'btn-supply', style: 'width:100%', text: 'Record fish from a dealer or fishing company',
+      onclick: function () { S.supplyForm = true; S.flash = null; render(); } }));
+  }
+  var list = suppliers();
+  if (!list.length) return h('div', { 'class': 'msg info', id: 'no-suppliers', text: 'No dealer or fishing company is registered yet. The platform administrator registers them under Administration, Organisations, with their nearest landing site.' });
+  var sites = [['', 'Choose...']].concat(S.sites.filter(function (x) { return x.status === 'active'; }).map(function (x) { return [x.id, x.name]; }));
+  var species = Object.keys(S.species).map(function (id) { return [id, spName(id)]; }).sort(function (a, b) { return a[1] < b[1] ? -1 : 1; });
+  return h('form', { 'class': 'card', id: 'supply-form', onsubmit: doSupply },
+    h('h3', { text: 'Fish from a dealer or fishing company' }),
+    h('p', { 'class': 'muted', text: 'Use this when the fish did not come through a landing recorded on CatchTrace. It is tied to the supplier and their nearest landing site, and customers are shown that its vessel and landing are not on record.' }),
+    h('div', { 'class': 'grid2' },
+      h('div', {}, field('Dealer or fishing company', h('select', { id: 'su-supplier', onchange: paintSupplierSite },
+        list.map(function (o) { return h('option', { value: o.id, text: o.name + ' (' + supplierKind(o.org_type) + ')' }); })))),
+      h('div', {}, field('Nearest landing site', sel('su-site', sites, list[0].home_landing_site_id || '')))),
+    h('div', { 'class': 'grid2' },
+      h('div', {}, field('Species', sel('su-species', [['', 'Choose...']].concat(species), ''))),
+      h('div', {}, field('Weight received, kg', h('input', { id: 'su-kg', inputmode: 'decimal' })))),
+    h('div', { 'class': 'grid2' },
+      h('div', {}, field('Received', h('input', { id: 'su-at', type: 'datetime-local', value: nowLocal() }))),
+      h('div', {}, field('How it arrived (optional)', h('input', { id: 'su-form', maxlength: '80', placeholder: 'For example: Whole, on ice' })))),
+    h('div', { 'class': 'grid2' },
+      h('div', {}, field('Where the supplier says it came from (optional)', h('input', { id: 'su-origin', maxlength: '200' }))),
+      h('div', {}, field('Delivery note or receipt number (optional)', h('input', { id: 'su-doc', maxlength: '60' })))),
+    h('div', { 'class': 'actions' }, btn('su-save', 'Record supply', 'Saving...', '', null, 'submit'),
+      h('button', { type: 'button', 'class': 'sec', text: 'Cancel', onclick: function () { S.supplyForm = false; S.flash = null; render(); } })));
+}
 function viewPurchases() {
   if (S.draft) return viewDraft();
   var pending = S.txns.filter(function (t) { return t.status === 'pending'; });
   var stock = S.txns.filter(function (t) { return t.status === 'confirmed' && left(t) > 0; });
-  return [h('h2', { text: 'Purchases' }), flash(),
+  return [h('h2', { text: 'Purchases' }), flash(), supplyCard(),
     h('h3', { text: 'Waiting for your confirmation' }),
     h('div', { id: 'pending' }, pending.length ? pending.map(function (t) { return txnCard(t, 'pending'); })
       : h('div', { 'class': 'card muted', text: 'Nothing is waiting. A purchase appears here when a landing site records a sale to you.' })),
@@ -536,6 +609,7 @@ function viewPurchases() {
       : h('div', { 'class': 'card muted', text: 'No confirmed purchases are waiting to be batched.' })),
     stock.length ? h('button', { 'class': 'big', id: 'btn-draft', text: 'Make a batch from the ticked purchases', onclick: startDraft }) : null];
 }
+function supplyOf(b) { return S.supplies.filter(function (u) { return u.batch_id === b.id; })[0]; }
 function batchCard(b) {
   var closed = b.status === 'closed', stock = closed ? Math.round((Number(b.output_kg) - Number(b.consumed_kg)) * 1000) / 1000 : null;
   return h('div', { 'class': 'card', 'data-batch': b.batch_ref },
@@ -543,7 +617,8 @@ function batchCard(b) {
       h('div', {},
         h('div', { 'class': 'name', text: b.product_name || b.product_form }),
         h('div', {}, h('span', { 'class': 'ref', text: b.batch_ref + ' ' }), h('span', { 'class': 'badge ' + (closed ? 'ok' : 'wait'), text: closed ? 'Closed' : 'Open' })),
-        h('div', { 'class': 'muted', text: closed ? kg(b.output_kg) + ' packed, ' + kg(stock) + ' left' : kg(b.input_kg) + ' went in - not yet closed' })),
+        h('div', { 'class': 'muted', text: closed ? kg(b.output_kg) + ' packed, ' + kg(stock) + ' left' : kg(b.input_kg) + ' went in - not yet closed' }),
+        supplyOf(b) ? h('div', { 'class': 'muted', text: (supplyOf(b).status === 'void' ? 'Withdrawn supply from ' : 'Bought from ') + (S.orgNames[supplyOf(b).supplier_organization_id] || 'a supplier') }) : null),
       h('button', { 'class': 'sec small act-open', text: 'Open', onclick: function () { openBatch(b.id); } })));
 }
 function viewBatches() {
@@ -592,18 +667,46 @@ function viewBatch() {
   var back = h('button', { 'class': 'sec small', id: 'btn-back', text: 'Back to batches', onclick: function () { go('batches'); } });
   if (!b) return [back, flash(), h('div', { 'class': 'card muted', text: 'Batch not found.' })];
   var closed = b.status === 'closed', stock = closed ? Math.round((Number(b.output_kg) - Number(b.consumed_kg)) * 1000) / 1000 : 0;
+  var sup = supplyOf(b), voided = !!sup && sup.status === 'void';
   var out = [back, h('h2', { text: (b.product_name || b.product_form) + ' - ' + b.batch_ref }), flash(),
     h('div', { 'class': 'card', id: 'batch-summary' },
       h('div', {}, h('span', { 'class': 'badge ' + (closed ? 'ok' : 'wait'), text: closed ? 'Closed' : 'Open' }), h('span', { 'class': 'badge', text: label(BATCH_TYPES, b.batch_type) })),
       h('div', { 'class': 'muted', text: 'Product: ' + b.product_form + ' - started ' + when(b.processed_at) }),
       h('div', { text: 'Went in: ' + kg(b.input_kg) + (Number(b.added_kg) ? ' plus ' + kg(b.added_kg) + ' added' : '') }),
       closed ? h('div', { text: 'Packed: ' + kg(b.output_kg) + ' - by-products: ' + kg(b.byproduct_kg) + ' - loss: ' + kg(b.loss_kg) }) : null,
-      closed ? h('div', { 'class': 'big-num', id: 'stock-left', text: kg(stock) + ' left in stock' }) : null)];
+      closed ? h('div', { 'class': 'big-num', id: 'stock-left', text: kg(stock) + ' left in stock' }) : null,
+      voided ? h('div', { 'class': 'msg err', id: 'voided', style: 'margin:10px 0 0', text: 'This supply was withdrawn: ' + (sup.void_reason || 'no reason given') + '. It stays on record and cannot be used.' }) : null,
+      closed && stock > 0 && !voided ? h('div', { 'class': 'actions' }, h('button', { type: 'button', 'class': 'sec', id: 'btn-further', text: 'Process this stock further',
+        onclick: function () { S.draft = { sources: [{ kind: 'batch', id: b.id }] }; S.batchId = null; S.detail = null; S.tab = 'purchases'; S.flash = null; render(); } })) : null)];
   if (!S.detail || S.detail.id !== b.id) return out.concat([h('div', { 'class': 'card muted', text: 'Loading...' })]);
+  var tr = S.detail.trace || {}, supSrc = tr.source_supplies || [], catchSrc = tr.source_catches || [];
+  var srcNodes = S.detail.links.length ? S.detail.links.map(function (l) {
+    return h('div', { 'class': 'item' }, catchLine(S.catches[l.catch_record_id]), h('div', { 'class': 'muted', text: kg(l.quantity_kg) + ' of this catch' }));
+  }) : catchSrc.map(function (c) {
+    return h('div', { 'class': 'item' }, h('div', { 'class': 'name', text: c.species + (c.species_sw ? ' / ' + c.species_sw : '') }), h('span', { 'class': 'ref', text: c.catch_ref + ' ' }),
+      h('span', { 'class': 'badge', text: (c.verification && c.verification.label) || 'Not yet verified' }), h('div', { 'class': 'muted', text: 'Landed at ' + c.landing_site + ', ' + c.county }));
+  });
+  srcNodes = srcNodes.concat(supSrc.map(function (u) {
+    return h('div', { 'class': 'item supply-src' },
+      h('div', { 'class': 'name', text: u.species + (u.species_sw ? ' / ' + u.species_sw : '') }),
+      h('span', { 'class': 'ref', text: u.supply_ref + ' ' }), h('span', { 'class': 'badge wait', text: 'Not verified' }),
+      h('div', { text: 'Bought from ' + u.supplier + ' (' + supplierKind(u.supplier_type) + ')' }),
+      h('div', { 'class': 'muted', text: kg(u.weight_kg) + ' received ' + when(u.received_at) + ' - tied to landing site ' + u.landing_site + ', ' + u.county +
+        (u.document_ref ? ' - delivery note ' + u.document_ref : '') + (u.declared_origin ? ' - the supplier says: ' + u.declared_origin : '') }),
+      h('div', { 'class': 'muted', text: 'The vessel and the landing are not on record.' }));
+  }));
   out.push(h('div', { 'class': 'card', id: 'sources' }, h('h3', { text: 'Where it came from' }),
-    h('div', { 'class': 'list' }, S.detail.links.length ? S.detail.links.map(function (l) {
-      return h('div', { 'class': 'item' }, catchLine(S.catches[l.catch_record_id]), h('div', { 'class': 'muted', text: kg(l.quantity_kg) + ' of this catch' }));
-    }) : h('div', { 'class': 'muted', text: 'Made from earlier batches.' }))));
+    h('div', { 'class': 'list' }, srcNodes.length ? srcNodes : h('div', { 'class': 'muted', text: voided ? 'Withdrawn supply.' : 'No source is on record.' }))));
+  if (voided) return out;
+  if (sup && closed && Number(b.consumed_kg) === 0 && !S.detail.tokens.some(function (k) { return k.status === 'active'; })) {
+    out.push(S.voiding === sup.id
+      ? h('form', { 'class': 'card', id: 'void-form', onsubmit: function (ev) { doVoid(ev, sup); } },
+          field('Why is this supply being withdrawn?', h('input', { id: 'void-reason', maxlength: '200', placeholder: 'For example: entered twice' })),
+          h('div', { 'class': 'actions' }, btn('void-go', 'Withdraw this supply', 'Saving...', 'danger', null, 'submit'),
+            h('button', { type: 'button', 'class': 'sec', text: 'Back', onclick: function () { S.voiding = null; S.flash = null; render(); } })))
+      : h('div', { 'class': 'card' }, h('button', { type: 'button', 'class': 'danger', id: 'btn-void', style: 'width:100%', text: 'Entered by mistake? Withdraw this supply',
+          onclick: function () { S.voiding = sup.id; S.flash = null; render(); } })));
+  }
   if (!closed) {
     out.push(h('form', { 'class': 'card', id: 'close-form', onsubmit: doClose, oninput: paintLoss },
       h('h3', { text: 'Close the batch' }),

@@ -64,9 +64,11 @@ function render(d) {
     '<dl style="margin-top:12px"><dt>Batch</dt><dd class="ref" id="batch-ref">' + esc(p.batch_ref) + '</dd>' +
     (p.packed_by ? '<dt>Packed by</dt><dd>' + esc(p.packed_by) + '</dd>' : '') +
     (p.packaged_on ? '<dt>Packed on</dt><dd>' + esc(day(p.packaged_on)) + '</dd>' : '') + '</dl></div>';
-  var src = d.sources || [];
-  h += '<h2>Where it was landed (' + src.length + (src.length === 1 ? ' catch' : ' catches') + ')</h2>';
-  if (!src.length) h += '<div class="card muted">No source catch is on file for this batch.</div>';
+  var src = d.sources || [], sup = d.supplier_sources || [];
+  if (src.length || !sup.length) {
+    h += '<h2 id="landed-h">Where it was landed (' + src.length + (src.length === 1 ? ' catch' : ' catches') + ')</h2>';
+    if (!src.length) h += '<div class="card muted">No source catch is on file for this batch.</div>';
+  }
   src.forEach(function (s) {
     var v = s.verification || {};
     h += '<div class="card source"><strong>' + esc(s.species_sw ? s.species_sw + ' / ' : '') + esc(s.species) + '</strong>' +
@@ -77,6 +79,19 @@ function render(d) {
       '<dt>Checked</dt><dd><span class="badge ' + (v.disputed ? 'bad' : (v.community || v.document || v.official) ? 'ok' : '') + '">' + esc(v.label || 'Not yet verified') + '</span>' +
       '<ul class="checks">' + mark(v.community, 'confirmed by the local fishers\' organisation') + mark(v.document, 'checked against a document') + mark(v.official, 'verified by the fisheries authority') + '</ul></dd></dl></div>';
   });
+  if (sup.length) {
+    h += '<h2 id="supplier-h">Bought from a dealer or fishing company (' + sup.length + ')</h2>';
+    sup.forEach(function (s) {
+      h += '<div class="card source supplier"><strong>' + esc(s.species_sw ? s.species_sw + ' / ' : '') + esc(s.species) + '</strong>' +
+        (s.scientific_name ? ' <span class="muted"><em>' + esc(s.scientific_name) + '</em></span>' : '') +
+        '<dl style="margin-top:10px"><dt>Supplied by</dt><dd>' + esc(s.supplier) + ' (' + (s.supplier_type === 'fishing_company' ? 'fishing company' : 'dealer') + ')</dd>' +
+        '<dt>Tied to landing site</dt><dd>' + esc(s.landing_site) + ', ' + esc(s.county) + ' County</dd>' +
+        '<dt>Received on</dt><dd>' + esc(day(s.received_on)) + '</dd>' +
+        '<dt>Supply record</dt><dd class="ref">' + esc(s.supply_ref) + '</dd>' +
+        '<dt>Checked</dt><dd><span class="badge">Not verified</span>' +
+        '<div class="muted" style="margin-top:6px">The vessel and the landing of this fish are not on record. It was bought from the supplier named here, who is tied to this landing site.</div></dd></dl></div>';
+    });
+  }
   var steps = d.processing_history || [];
   if (steps.length) {
     h += '<h2>What happened to it</h2><div class="card"><ol class="steps">';
