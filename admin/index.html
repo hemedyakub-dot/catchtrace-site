@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b3c5d">
+<meta name="robots" content="noindex">
+<title>CatchTrace - Administration</title>
+<link rel="icon" href="../landing/icon.svg" type="image/svg+xml">
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:#f3f5f7;color:#16212b;padding-bottom:40px}
+header{background:#0b3c5d;color:#fff;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;position:sticky;top:0;z-index:5}
+header .t{font-weight:700;font-size:17px}
+header .o{font-size:12px;opacity:.85}
+header button{background:transparent;border:1px solid #fff;color:#fff;min-height:36px;padding:6px 10px;font-size:13px}
+main{padding:12px;max-width:760px;margin:0 auto}
+h2{font-size:18px;margin:6px 0 10px}
+h3{font-size:15px;margin:14px 0 6px}
+.card{background:#fff;border:1px solid #d7dde3;border-radius:8px;padding:12px;margin:0 0 10px}
+.row{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.muted{color:#5b6875;font-size:13px}
+.name{font-weight:700;font-size:16px;overflow-wrap:anywhere}
+.sw{font-size:15px;overflow-wrap:anywhere}
+label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px}
+input,select,textarea{width:100%;font:inherit;padding:11px 10px;border:1px solid #9aa7b3;border-radius:6px;background:#fff;color:inherit;min-height:46px}
+input:focus,select:focus,textarea:focus{outline:2px solid #0b6fb8;outline-offset:0}
+button{font:inherit;font-weight:700;border:0;border-radius:6px;padding:12px 14px;min-height:46px;background:#0b6fb8;color:#fff;cursor:pointer}
+button.big{width:100%;font-size:17px;padding:14px}
+button.sec{background:#fff;color:#0b3c5d;border:1px solid #0b3c5d}
+button.small{min-height:38px;padding:8px 10px;font-size:14px}
+button:disabled{opacity:.5;cursor:default}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media (max-width:520px){.grid2{grid-template-columns:1fr}}
+.badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px;background:#e3e8ed;color:#33414d;vertical-align:middle;margin-right:4px}
+.badge.wait{background:#fff0cc;color:#6b4a00}
+.badge.ok{background:#d6f0e0;color:#14532d}
+.msg{padding:10px 12px;border-radius:6px;margin:0 0 10px;font-size:14px}
+.msg.err{background:#fbdada;color:#7c1515}
+.msg.info{background:#e3eef8;color:#0b3c5d}
+.msg.ok{background:#d6f0e0;color:#14532d}
+.hist{border-top:1px solid #e6eaee;margin-top:12px;padding-top:8px}
+.hist div{font-size:13px;margin:0 0 8px;overflow-wrap:anywhere}
+.actions{display:flex;gap:8px;margin-top:12px}
+.actions button{flex:1}
+</style>
+</head>
+<body>
+<header>
+  <div><div class="t" id="hdr-title">CatchTrace</div><div class="o">Administration</div></div>
+  <div id="hdr-user"></div>
+</header>
+<main id="view"></main>
+<script>
+(function () {
+'use strict';
+var CATS = [['finfish', 'Fish'], ['crustacean', 'Prawn, crab or lobster'], ['cephalopod', 'Octopus, squid or cuttlefish'],
+            ['shellfish', 'Shellfish'], ['echinoderm', 'Sea cucumber or urchin'], ['seaweed', 'Seaweed'], ['other', 'Other']];
+var STATUS = { unverified: ['Unverified', 'wait'], authoritative: ['Authoritative', 'ok'], demo: ['Demo', ''] };
+var FIELD = { common_name_en: 'English name', common_name_sw: 'Swahili name', scientific_name: 'Scientific name', category: 'Category' };
+var SESSION_KEY = 'ct.admin.session';
+var S = { cfg: null, session: null, ctx: null, species: [], history: {}, q: '', open: null, adding: false, flash: null, busy: false, loading: false };
+
+// ------------------------------------------------------------------- dom
+// Everything shown comes through text nodes; no markup is built from data.
+function h(tag, attrs) {
+  var e = document.createElement(tag), k, i;
+  for (k in (attrs || {})) {
+    var v = attrs[k];
+    if (v === null || v === undefined || v === false) continue;
+    if (k === 'text') e.textContent = v;
+    else if (k === 'class') e.className = v;
+    else if (k === 'value') e.value = v;
+    else if (k.slice(0, 2) === 'on') e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v === true ? '' : v);
+  }
+  for (i = 2; i < arguments.length; i++) add(e, arguments[i]);
+  return e;
+}
+function add(e, c) {
+  if (c === null || c === undefined || c === false) return;
+  if (Array.isArray(c)) { c.forEach(function (x) { add(e, x); }); return; }
+  e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+}
+function $(sel) { return document.querySelector(sel); }
+function catLabel(c) { for (var i = 0; i < CATS.length; i++) if (CATS[i][0] === c) return CATS[i][1]; return c; }
+function when(ts) {
+  try { return new Date(ts).toLocaleString('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+  catch (e) { return String(ts); }
+}
+
+// ------------------------------------------------------------------- api
+function NetErr(m) { this.name = 'NetErr'; this.message = m || 'No connection'; }
+function AuthErr(m) { this.name = 'AuthErr'; this.message = m || 'Please sign in again'; }
+function ApiErr(m, code, status) { this.name = 'ApiErr'; this.message = m; this.code = code; this.status = status; }
+
+function raw(path, opts, timeoutMs) {
+  var ctl = new AbortController(), timer = setTimeout(function () { ctl.abort(); }, timeoutMs || 20000);
+  opts = opts || {}; opts.signal = ctl.signal;
+  return fetch(S.cfg.url + path, opts).then(function (r) { clearTimeout(timer); return r; },
+    function () { clearTimeout(timer); throw new NetErr(); });
+}
+function saveSession(s) { S.session = s; if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s)); else localStorage.removeItem(SESSION_KEY); }
+function signIn(email, password) {
+  return raw('/auth/v1/token?grant_type=password', { method: 'POST', headers: { apikey: S.cfg.key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim().toLowerCase(), password: password }) }).then(function (r) {
+    return r.json().then(null, function () { throw new NetErr('Connection lost'); }).then(function (j) {
+      if (!r.ok) { if (r.status >= 500) throw new NetErr(); throw new ApiErr(j.error_description || j.msg || 'Sign-in failed', j.error, r.status); }
+      saveSession(j); return j;
+    });
+  });
+}
+var refreshing = null;
+function refreshToken() {
+  if (refreshing) return refreshing;
+  refreshing = raw('/auth/v1/token?grant_type=refresh_token', { method: 'POST', headers: { apikey: S.cfg.key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: S.session.refresh_token }) }).then(function (r) {
+    return r.json().then(null, function () { throw new NetErr('Connection lost'); }).then(function (j) {
+      if (!r.ok) { if (r.status >= 500 || r.status === 429) throw new NetErr(); throw new AuthErr(); }
+      saveSession(j); return j;
+    });
+  }).then(function (j) { refreshing = null; return j; }, function (e) { refreshing = null; throw e; });
+  return refreshing;
+}
+function authed(path, opts, retried) {
+  if (!S.session) return Promise.reject(new AuthErr());
+  var pre = (S.session.expires_at && S.session.expires_at - Date.now() / 1000 < 60) ? refreshToken() : Promise.resolve();
+  return pre.then(function () {
+    opts.headers = Object.assign({}, opts.headers, { apikey: S.cfg.key, Authorization: 'Bearer ' + S.session.access_token });
+    return raw(path, opts);
+  }).then(function (r) {
+    if (r.status === 401 && !retried) return refreshToken().then(function () { return authed(path, opts, true); });
+    return r.text().then(null, function () { throw new NetErr('Connection lost'); }).then(function (t) {
+      var j = null; try { j = t ? JSON.parse(t) : null; } catch (e) { /* not json */ }
+      if (r.ok) return j;
+      if (r.status === 401) throw new AuthErr();
+      // Go by the database's own error code, not the HTTP status (the hosted
+      // gateway answers "not found" with status 500).
+      var msg = String((j && j.message) || 'Request refused').replace(/^catchtrace:\s*/, '');
+      var sqlstate = j && typeof j.code === 'string' && /^[0-9A-Z]{5}$/.test(j.code) ? j.code : null;
+      if (sqlstate && !/^(08|40|53|55|57|58|XX)/.test(sqlstate)) throw new ApiErr(msg, sqlstate, r.status);
+      if (r.status >= 500 || r.status === 408 || r.status === 429) throw new NetErr('Server busy');
+      throw new ApiErr(msg, j && j.code, r.status);
+    });
+  });
+}
+function rpc(fn, args) { return authed('/rest/v1/rpc/' + fn, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Profile': 'catchtrace' }, body: JSON.stringify(args || {}) }); }
+function get(table, query) { return authed('/rest/v1/' + table + '?' + query, { method: 'GET', headers: { 'Accept-Profile': 'catchtrace' } }); }
+
+// ------------------------------------------------------------------ data
+function loadSpecies() {
+  return get('species', 'select=id,common_name_en,common_name_sw,scientific_name,category,data_status,is_demo&order=common_name_en.asc')
+    .then(function (rows) { S.species = rows || []; });
+}
+function loadAll() {
+  S.loading = true; render();
+  return Promise.all([rpc('my_context'), loadSpecies()]).then(function (r) { S.ctx = r[0]; S.loading = false; render(); },
+    function (e) { S.loading = false; fail(e, true); });
+}
+function loadHistory(id) {
+  return get('species_amendments', 'select=id,amended_at,reason,old_values,new_values&species_id=eq.' + id + '&order=amended_at.desc')
+    .then(function (rows) { S.history[id] = rows || []; });
+}
+function isAdmin() { return !!(S.ctx && S.ctx.is_platform_admin); }
+
+// --------------------------------------------------------------- actions
+// A message or a "saving" state is painted in place, so whatever is typed in
+// an open form stays there. The whole view is redrawn only when it changes.
+function clear(e) { while (e.firstChild) e.removeChild(e.firstChild); }
+function setFlash(kind, text) {
+  S.flash = kind ? [kind, text] : null;
+  var b = $('#flash-box'); if (!b) return;
+  clear(b);
+  if (S.flash) { add(b, h('div', { 'class': 'msg ' + kind, id: 'flash', text: text })); if (b.scrollIntoView) b.scrollIntoView({ block: 'nearest' }); }
+}
+function setBusy(on) {
+  S.busy = on;
+  Array.prototype.forEach.call(document.querySelectorAll('button[data-busy]'), function (btn) {
+    btn.disabled = on; btn.textContent = on ? btn.getAttribute('data-busy') : btn.getAttribute('data-label');
+  });
+}
+function fail(e, redraw) {
+  S.busy = false;
+  if (e instanceof AuthErr) { saveSession(null); S.ctx = null; S.open = null; S.adding = false; S.flash = ['err', 'Your sign-in has ended. Sign in again.']; return render(); }
+  var text = e instanceof NetErr ? 'Connection problem. Check the list below before trying again - the change may or may not have been saved.'
+           : (e && e.code === '23505') ? 'A species with this English name already exists.'
+           : (e && e.message) || 'Something went wrong.';
+  if (redraw) { S.flash = ['err', text]; return render(); }
+  setBusy(false); setFlash('err', text);
+}
+// After a connection problem, fetch the list again so it shows whether the change went through.
+function failAfterWrite(e) {
+  if (!(e instanceof NetErr)) return fail(e);
+  return loadSpecies().then(function () { fail(e, true); }, function () { fail(e); });
+}
+function doSignIn(ev) {
+  ev.preventDefault();
+  if (S.busy) return;
+  setFlash(null); setBusy(true);
+  signIn($('#email').value, $('#password').value).then(function () { S.busy = false; return loadAll(); },
+    function (e) { setBusy(false); setFlash('err', e instanceof NetErr ? 'No connection. Try again.' : 'Sign-in failed. Check the email and password.'); });
+}
+function doSignOut() { saveSession(null); S.ctx = null; S.species = []; S.history = {}; S.open = null; S.adding = false; S.flash = null; S.q = ''; render(); }
+function doAdd(ev) {
+  ev.preventDefault();
+  if (S.busy) return;
+  var en = $('#add-en').value.trim(), sw = $('#add-sw').value.trim(), sci = $('#add-sci').value.trim(), cat = $('#add-cat').value;
+  if (!en) return setFlash('err', 'Enter the English name.');
+  setFlash(null); setBusy(true);
+  rpc('add_species', { p_common_name_en: en, p_common_name_sw: sw || null, p_scientific_name: sci || null, p_asfis_code: null,
+                       p_category: cat, p_data_status: 'unverified', p_source: 'Added by the operator in the administration page', p_source_ref: null })
+    .then(loadSpecies)
+    .then(function () { S.busy = false; S.adding = false; S.flash = ['ok', 'Added: ' + en + '. It is saved as unverified.']; render(); }, failAfterWrite);
+}
+function doAmend(ev) {
+  ev.preventDefault();
+  if (S.busy) return;
+  var sp = S.species.filter(function (x) { return x.id === S.open; })[0];
+  if (!sp) return;
+  var en = $('#am-en').value.trim(), sw = $('#am-sw').value.trim(), sci = $('#am-sci').value.trim(), cat = $('#am-cat').value, reason = $('#am-reason').value.trim();
+  var args = { p_species_id: sp.id, p_common_name_en: null, p_common_name_sw: null, p_scientific_name: null, p_category: null, p_reason: reason };
+  // Only what changed is sent. An empty string clears a name; null leaves it alone.
+  if (en !== sp.common_name_en) args.p_common_name_en = en;
+  if (sw !== (sp.common_name_sw || '')) args.p_common_name_sw = sw;
+  if (sci !== (sp.scientific_name || '')) args.p_scientific_name = sci;
+  if (cat !== sp.category) args.p_category = cat;
+  if (!en) return setFlash('err', 'The English name cannot be empty.');
+  if (args.p_common_name_en === null && args.p_common_name_sw === null && args.p_scientific_name === null && args.p_category === null) {
+    return setFlash('err', 'Nothing was changed.');
+  }
+  if (reason.length < 3) return setFlash('err', 'Give a short reason for the amendment.');
+  setFlash(null); setBusy(true);
+  rpc('amend_species', args).then(function () { delete S.history[sp.id]; return loadSpecies(); })
+    .then(function () { S.busy = false; S.open = null; S.flash = ['ok', 'Amendment saved for ' + en + '.']; render(); }, failAfterWrite);
+}
+function openAmend(id) {
+  S.open = id; S.adding = false; S.flash = null; render();
+  if (!S.history[id]) loadHistory(id).then(function () { if (S.open === id) paintHistory(id); }, function () { /* history is optional */ });
+}
+
+// ---------------------------------------------------------------- render
+function catSelect(id, value) {
+  return h('select', { id: id }, CATS.map(function (c) { return h('option', { value: c[0], selected: c[0] === value, text: c[1] }); }));
+}
+function field(label, input) { return [h('label', { 'for': input.id, text: label }), input]; }
+function flash() { return h('div', { id: 'flash-box' }, S.flash ? h('div', { 'class': 'msg ' + S.flash[0], id: 'flash', text: S.flash[1] }) : null); }
+function submitBtn(id, label, busyLabel, cls) { return h('button', { type: 'submit', id: id, 'class': cls, 'data-label': label, 'data-busy': busyLabel, disabled: S.busy, text: S.busy ? busyLabel : label }); }
+
+function viewLogin() {
+  return [
+    h('h2', { text: 'Sign in' }), flash(),
+    h('form', { 'class': 'card', id: 'login', onsubmit: doSignIn },
+      field('Email', h('input', { id: 'email', type: 'email', autocomplete: 'username', required: true })),
+      field('Password', h('input', { id: 'password', type: 'password', autocomplete: 'current-password', required: true })),
+      h('div', { 'class': 'actions' }, submitBtn('login-go', 'Sign in', 'Signing in...', 'big')))
+  ];
+}
+function addCard() {
+  if (!isAdmin()) return h('div', { 'class': 'msg info', id: 'readonly', text: 'You can read the species list. Only the platform administrator can add or amend species.' });
+  if (!S.adding) return h('div', { 'class': 'card' }, h('button', { 'class': 'big', id: 'btn-add', text: 'Add a new species', onclick: function () { S.adding = true; S.open = null; S.flash = null; render(); } }));
+  return h('form', { 'class': 'card', id: 'add-form', onsubmit: doAdd },
+    h('h3', { text: 'Add a new species' }),
+    h('div', { 'class': 'grid2' },
+      h('div', {}, field('English name', h('input', { id: 'add-en', maxlength: '80', required: true }))),
+      h('div', {}, field('Swahili name', h('input', { id: 'add-sw', maxlength: '80' })))),
+    h('div', { 'class': 'grid2' },
+      h('div', {}, field('Category', catSelect('add-cat', 'finfish'))),
+      h('div', {}, field('Scientific name (optional)', h('input', { id: 'add-sci', maxlength: '120' })))),
+    h('p', { 'class': 'muted', text: 'New species are saved as unverified. Leave the Swahili name empty if you are not sure of it.' }),
+    h('div', { 'class': 'actions' },
+      submitBtn('add-save', 'Save species', 'Saving...'),
+      h('button', { type: 'button', 'class': 'sec', text: 'Cancel', onclick: function () { S.adding = false; S.flash = null; render(); } })));
+}
+function historyNodes(id) {
+  var rows = S.history[id];
+  if (!rows) return [h('div', { 'class': 'muted', text: 'Loading earlier amendments...' })];
+  if (!rows.length) return [h('div', { 'class': 'muted', text: 'No earlier amendments.' })];
+  return rows.map(function (r) {
+    var parts = Object.keys(r.new_values || {}).map(function (k) {
+      var o = r.old_values[k], n = r.new_values[k];
+      if (k === 'category') { o = catLabel(o); n = catLabel(n); }
+      return (FIELD[k] || k) + ': ' + (o === null || o === undefined ? '(none)' : o) + ' -> ' + (n === null || n === undefined ? '(none)' : n);
+    });
+    return h('div', { 'class': 'hist-row' }, h('strong', { text: when(r.amended_at) }), ' - ' + parts.join('; ') + '. Reason: ' + r.reason);
+  });
+}
+function paintHistory(id) { var box = $('#am-history'); if (!box) return; clear(box); add(box, [h('h3', { text: 'Earlier amendments' })].concat(historyNodes(id))); }
+function amendForm(sp) {
+  return h('form', { id: 'amend-form', onsubmit: doAmend },
+    h('div', { 'class': 'grid2' },
+      h('div', {}, field('English name', h('input', { id: 'am-en', maxlength: '80', value: sp.common_name_en, required: true }))),
+      h('div', {}, field('Swahili name', h('input', { id: 'am-sw', maxlength: '80', value: sp.common_name_sw || '' })))),
+    h('div', { 'class': 'grid2' },
+      h('div', {}, field('Category', catSelect('am-cat', sp.category))),
+      h('div', {}, field('Scientific name (optional)', h('input', { id: 'am-sci', maxlength: '120', value: sp.scientific_name || '' })))),
+    field('Reason for the amendment', h('input', { id: 'am-reason', maxlength: '200', placeholder: 'For example: spelling corrected' })),
+    h('p', { 'class': 'muted', text: 'This changes the name shown on every record of this species, past records included. It does not change which species a catch was - that is done with a correction on the catch record.' }),
+    h('div', { 'class': 'actions' },
+      submitBtn('am-save', 'Save amendment', 'Saving...'),
+      h('button', { type: 'button', 'class': 'sec', text: 'Cancel', onclick: function () { S.open = null; S.flash = null; render(); } })),
+    h('div', { 'class': 'hist', id: 'am-history' }, h('h3', { text: 'Earlier amendments' }), historyNodes(sp.id)));
+}
+function speciesCard(sp) {
+  var st = STATUS[sp.data_status] || [sp.data_status, ''];
+  var canAmend = isAdmin() && sp.data_status !== 'authoritative';
+  return h('div', { 'class': 'card', 'data-species': sp.id },
+    h('div', { 'class': 'row' },
+      h('div', {},
+        h('div', { 'class': 'name', text: sp.common_name_en }),
+        sp.common_name_sw ? h('div', { 'class': 'sw', text: sp.common_name_sw }) : h('div', { 'class': 'muted', text: 'No Swahili name' }),
+        h('div', { style: 'margin-top:6px' },
+          h('span', { 'class': 'badge', text: catLabel(sp.category) }),
+          h('span', { 'class': 'badge ' + st[1], text: st[0] }),
+          sp.scientific_name ? h('span', { 'class': 'muted', text: sp.scientific_name }) : null)),
+      canAmend && S.open !== sp.id ? h('button', { 'class': 'sec small', 'data-act': 'amend', text: 'Amend', onclick: function () { openAmend(sp.id); } }) : null),
+    S.open === sp.id ? amendForm(sp) : null);
+}
+function listNodes() {
+  var q = S.q.trim().toLowerCase();
+  var rows = S.species.filter(function (sp) {
+    return !q || sp.common_name_en.toLowerCase().indexOf(q) >= 0 || (sp.common_name_sw || '').toLowerCase().indexOf(q) >= 0;
+  });
+  var out = [h('div', { 'class': 'muted', id: 'sp-count', style: 'margin:0 0 8px', text: rows.length === S.species.length ? S.species.length + ' species' : rows.length + ' of ' + S.species.length + ' species' })];
+  if (!rows.length) out.push(h('div', { 'class': 'card muted', text: S.species.length ? 'No species match that search.' : 'No species yet.' }));
+  return out.concat(rows.map(speciesCard));
+}
+function paintList() { var box = $('#sp-list'); if (!box) return; clear(box); add(box, listNodes()); }
+function viewSpecies() {
+  if (S.loading && !S.species.length) return [h('div', { 'class': 'card muted', text: 'Loading...' })];
+  return [
+    h('h2', { text: 'Species' }), flash(), addCard(),
+    h('div', { 'class': 'card' }, field('Search by English or Swahili name',
+      h('input', { id: 'sp-q', type: 'search', value: S.q, oninput: function (e) { S.q = e.target.value; S.open = null; paintList(); } }))),
+    h('div', { id: 'sp-list' }, listNodes())
+  ];
+}
+function render() {
+  var v = $('#view'), u = $('#hdr-user');
+  clear(v); clear(u);
+  $('#hdr-title').textContent = 'CatchTrace' + (S.cfg && S.cfg.env !== 'production' ? ' - ' + String(S.cfg.env || 'test').toUpperCase() : '');
+  if (!S.session) { add(v, viewLogin()); return; }
+  add(u, h('button', { id: 'btn-signout', text: 'Sign out', onclick: doSignOut }));
+  add(v, viewSpecies());
+}
+
+// ------------------------------------------------------------------ boot
+fetch('config.json', { cache: 'no-cache' }).then(function (r) { return r.json(); }).then(function (c) {
+  S.cfg = c;
+  try { S.session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch (e) { S.session = null; }
+  if (!S.session) return render();
+  return loadAll();
+}).catch(function () { add($('#view'), h('div', { 'class': 'msg err', text: 'The page could not start. Check the connection and open it again.' })); });
+window.__cta = { S: S };   // read-only handle used by the automated tests
+})();
+</script>
+</body>
+</html>
