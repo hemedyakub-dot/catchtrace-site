@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0b3c5d">
+<title>CatchTrace - Where this fish came from</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:#f3f5f7;color:#16212b}
+header{background:#0b3c5d;color:#fff;padding:14px 16px}
+header .t{font-weight:700;font-size:18px}
+header .s{font-size:13px;opacity:.85}
+main{max-width:640px;margin:0 auto;padding:14px}
+h1{font-size:22px;margin:4px 0 2px}
+h2{font-size:16px;margin:20px 0 8px}
+.card{background:#fff;border:1px solid #d7dde3;border-radius:8px;padding:14px;margin:0 0 10px}
+.muted{color:#5b6875;font-size:14px}
+.ref{font-family:ui-monospace,Consolas,monospace;font-size:14px}
+dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:6px 14px}
+dt{color:#5b6875;font-size:14px}
+dd{margin:0}
+.demo{background:#fff0cc;color:#6b4a00;border:1px solid #e0c46a;border-radius:8px;padding:12px;margin:0 0 12px;font-weight:600}
+.msg{background:#fff;border:1px solid #d7dde3;border-radius:8px;padding:18px}
+.badge{display:inline-block;font-size:13px;font-weight:700;padding:3px 9px;border-radius:12px;background:#e3e8ed;color:#33414d}
+.badge.ok{background:#d6f0e0;color:#14532d}
+.badge.bad{background:#fbdada;color:#7c1515}
+.checks{list-style:none;margin:8px 0 0;padding:0;font-size:14px}
+.checks li{padding:2px 0}
+.yes{color:#14532d;font-weight:700}
+.no{color:#5b6875}
+ol.steps{margin:0;padding-left:20px}
+ol.steps li{margin:0 0 6px}
+footer{max-width:640px;margin:0 auto;padding:6px 14px 30px;font-size:13px;color:#5b6875}
+</style>
+</head>
+<body>
+<header><div class="t">CatchTrace</div><div class="s" id="env">Where this fish came from</div></header>
+<main id="view"><div class="msg">Looking up this code...</div></main>
+<footer>This page shows what was recorded on CatchTrace for this product. It does not show who caught the fish, prices or fishing positions.</footer>
+<script>
+(function () {
+'use strict';
+var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+var view = document.getElementById('view');
+function day(d) { if (!d) return ''; var p = String(d).split('-'); var m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][parseInt(p[1], 10) - 1]; return parseInt(p[2], 10) + ' ' + m + ' ' + p[0]; }
+function show(html) { view.innerHTML = html; }
+function notFound() {
+  show('<div class="msg" id="not-found"><h1>Code not recognised</h1><p>This code is not on file, or it has been withdrawn. Check that the whole code was scanned, or ask the seller.</p></div>');
+}
+function unavailable() {
+  show('<div class="msg" id="unavailable"><h1>Could not check this code</h1><p>There was a problem reaching the service. Check your connection and try again.</p><p><button id="retry" style="font:inherit;padding:10px 16px">Try again</button></p></div>');
+  document.getElementById('retry').addEventListener('click', function () { location.reload(); });
+}
+var STEP = { intake: 'Received', processing: 'Processed', repack: 'Repacked', merge: 'Combined with other lots', byproduct: 'By-product separated' };
+function mark(b, text) { return '<li><span class="' + (b ? 'yes">Yes' : 'no">Not yet') + '</span> - ' + text + '</li>'; }
+function render(d) {
+  var p = d.product || {}, h = '';
+  if (d.demonstration_data) h += '<div class="demo" id="demo">Demonstration record. This is test data, not a real catch.</div>';
+  h += '<div class="card"><h1 id="product">' + esc(p.product_name || p.product_form || 'Seafood product') + '</h1>' +
+    (p.product_name && p.product_form ? '<div class="muted">' + esc(p.product_form) + '</div>' : '') +
+    '<dl style="margin-top:12px"><dt>Batch</dt><dd class="ref" id="batch-ref">' + esc(p.batch_ref) + '</dd>' +
+    (p.packed_by ? '<dt>Packed by</dt><dd>' + esc(p.packed_by) + '</dd>' : '') +
+    (p.packaged_on ? '<dt>Packed on</dt><dd>' + esc(day(p.packaged_on)) + '</dd>' : '') + '</dl></div>';
+  var src = d.sources || [];
+  h += '<h2>Where it was landed (' + src.length + (src.length === 1 ? ' catch' : ' catches') + ')</h2>';
+  if (!src.length) h += '<div class="card muted">No source catch is on file for this batch.</div>';
+  src.forEach(function (s) {
+    var v = s.verification || {};
+    h += '<div class="card source"><strong>' + esc(s.species_sw ? s.species_sw + ' / ' : '') + esc(s.species) + '</strong>' +
+      (s.scientific_name ? ' <span class="muted"><em>' + esc(s.scientific_name) + '</em></span>' : '') +
+      '<dl style="margin-top:10px"><dt>Landing site</dt><dd>' + esc(s.landing_site) + ', ' + esc(s.county) + ' County</dd>' +
+      '<dt>Landed on</dt><dd>' + esc(day(s.catch_date)) + '</dd>' +
+      '<dt>Catch record</dt><dd class="ref">' + esc(s.catch_ref) + '</dd>' +
+      '<dt>Checked</dt><dd><span class="badge ' + (v.disputed ? 'bad' : (v.community || v.document || v.official) ? 'ok' : '') + '">' + esc(v.label || 'Not yet verified') + '</span>' +
+      '<ul class="checks">' + mark(v.community, 'confirmed by the local fishers\' organisation') + mark(v.document, 'checked against a document') + mark(v.official, 'verified by the fisheries authority') + '</ul></dd></dl></div>';
+  });
+  var steps = d.processing_history || [];
+  if (steps.length) {
+    h += '<h2>What happened to it</h2><div class="card"><ol class="steps">';
+    steps.forEach(function (s) {
+      h += '<li>' + esc(STEP[s.step] || s.step) + (s.product_form ? ': ' + esc(s.product_form) : '') + (s.processed_on ? ' - ' + esc(day(s.processed_on)) : '') +
+        (s.packaged_on ? ', packed ' + esc(day(s.packaged_on)) : '') + ' <span class="ref muted">' + esc(s.batch_ref) + '</span></li>';
+    });
+    h += '</ol></div>';
+  }
+  show(h);
+}
+var m = /[?&#]t=([0-9a-fA-F]{32})(?:[&#]|$)/.exec(location.search + location.hash);
+if (!m) { notFound(); return; }
+fetch('config.json', { cache: 'no-cache' }).then(function (r) { return r.json(); }).then(function (cfg) {
+  if (cfg.env && cfg.env !== 'production') document.getElementById('env').textContent = String(cfg.env).toUpperCase() + ' - not the live system';
+  return fetch(cfg.url + '/rest/v1/rpc/public_trace', { method: 'POST',
+    headers: { apikey: cfg.key, 'Content-Type': 'application/json', 'Content-Profile': 'catchtrace' },
+    body: JSON.stringify({ p_token: m[1].toLowerCase() }) });
+}).then(function (r) {
+  if (!r.ok) throw new Error('http ' + r.status);
+  return r.json();
+}).then(function (d) { if (d && d.found) render(d); else notFound(); }, unavailable);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b3c5d">
+<title>CatchTrace - Landing site</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:#f3f5f7;color:#16212b;padding-bottom:72px}
+header{background:#0b3c5d;color:#fff;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;position:sticky;top:0;z-index:5}
+header .t{font-weight:700;font-size:17px}
+header .o{font-size:12px;opacity:.85}
+.pill{font-size:12px;font-weight:700;padding:5px 9px;border-radius:12px;background:#1f7a4d;color:#fff;white-space:nowrap}
+.pill.off{background:#8a5a00}
+.pill.warn{background:#a32626}
+main{padding:12px;max-width:640px;margin:0 auto}
+h2{font-size:18px;margin:6px 0 10px}
+h3{font-size:15px;margin:14px 0 6px}
+.card{background:#fff;border:1px solid #d7dde3;border-radius:8px;padding:12px;margin:0 0 10px}
+.row{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.muted{color:#5b6875;font-size:13px}
+.ref{font-family:ui-monospace,Consolas,monospace;font-size:13px}
+label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px}
+input,select,textarea{width:100%;font:inherit;padding:11px 10px;border:1px solid #9aa7b3;border-radius:6px;background:#fff;color:inherit;min-height:46px}
+input:focus,select:focus,textarea:focus{outline:2px solid #0b6fb8;outline-offset:0}
+button{font:inherit;font-weight:700;border:0;border-radius:6px;padding:12px 14px;min-height:46px;background:#0b6fb8;color:#fff;cursor:pointer}
+button.big{width:100%;font-size:17px;padding:14px}
+button.sec{background:#fff;color:#0b3c5d;border:1px solid #0b3c5d}
+button.danger{background:#fff;color:#a32626;border:1px solid #a32626}
+button.small{min-height:38px;padding:8px 10px;font-size:14px}
+button:disabled{opacity:.5;cursor:default}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px;background:#e3e8ed;color:#33414d;vertical-align:middle}
+.badge.wait{background:#fff0cc;color:#6b4a00}
+.badge.bad{background:#fbdada;color:#7c1515}
+.badge.ok{background:#d6f0e0;color:#14532d}
+.msg{padding:10px 12px;border-radius:6px;margin:0 0 10px;font-size:14px}
+.msg.err{background:#fbdada;color:#7c1515}
+.msg.info{background:#e3eef8;color:#0b3c5d}
+.msg.ok{background:#d6f0e0;color:#14532d}
+.pick{border:1px solid #d7dde3;border-radius:6px;margin-top:6px;background:#fff}
+.pick button{display:block;width:100%;text-align:left;background:#fff;color:inherit;font-weight:400;border-radius:0;border-bottom:1px solid #e6eaee}
+.pick button:last-child{border-bottom:0}
+.line{border:1px solid #c5ced6;border-radius:8px;padding:10px;margin:0 0 10px;background:#fafbfc}
+nav{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #c5ced6;display:flex;z-index:5}
+nav button{flex:1;background:#fff;color:#33414d;border-radius:0;font-size:13px;padding:10px 4px;min-height:58px}
+nav button.on{color:#0b3c5d;box-shadow:inset 0 3px 0 #0b3c5d}
+.hide{display:none}
+</style>
+</head>
+<body>
+<header>
+  <div><div class="t">CatchTrace</div><div class="o" id="hdr-org">Landing site</div></div>
+  <div class="pill" id="hdr-status">...</div>
+</header>
+<main id="view"></main>
+<nav id="tabs" class="hide">
+  <button data-act="go" data-view="trips">Trips</button>
+  <button data-act="go" data-view="records">Records</button>
+  <button data-act="go" data-view="sync">Sync</button>
+  <button data-act="go" data-view="account">Account</button>
+</nav>
+<script>
+(function () {
+'use strict';
+var VERSION = '0.1.0';
+var $ = function (s, r) { return (r || document).querySelector(s); };
+var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+function uuid() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  var b = crypto.getRandomValues(new Uint8Array(16)); b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+  var h = Array.prototype.map.call(b, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+  return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
+}
+function nowLocal() { var d = new Date(); d.setSeconds(0, 0); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
+function fmtTime(iso) { if (!iso) return ''; var d = new Date(iso); return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); }
+function kg(n) { return (Math.round(Number(n) * 1000) / 1000).toString(); }
+
+// ------------------------------------------------------------- local store
+var DB = (function () {
+  var p;
+  function open() {
+    if (!p) p = new Promise(function (res, rej) {
+      var r = indexedDB.open('catchtrace-landing', 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore('kv'); r.result.createObjectStore('outbox', { keyPath: 'cid' }); };
+      r.onsuccess = function () { res(r.result); };
+      r.onerror = function () { rej(r.error); };
+    });
+    return p;
+  }
+  function tx(store, mode, fn) {
+    return open().then(function (db) {
+      return new Promise(function (res, rej) {
+        var t = db.transaction(store, mode), out = fn(t.objectStore(store));
+        t.oncomplete = function () { res(out && out.result !== undefined ? out.result : undefined); };
+        t.onerror = t.onabort = function () { rej(t.error); };
+      });
+    });
+  }
+  return {
+    get: function (s, k) { return tx(s, 'readonly', function (o) { return o.get(k); }); },
+    put: function (s, v, k) { return tx(s, 'readwrite', function (o) { return k === undefined ? o.put(v) : o.put(v, k); }); },
+    del: function (s, k) { return tx(s, 'readwrite', function (o) { return o.delete(k); }); },
+    all: function (s) { return tx(s, 'readonly', function (o) { return o.getAll(); }); }
+  };
+})();
+
+// --------------------------------------------------------------------- api
+function NetErr(m) { this.name = 'NetErr'; this.message = m || 'No connection'; }
+function AuthErr(m) { this.name = 'AuthErr'; this.message = m || 'Please sign in again'; }
+function ApiErr(m, code, status) { this.name = 'ApiErr'; this.message = m; this.code = code; this.status = status; }
+var S = { cfg: null, session: null, ctx: null, org: null, ref: null, fishers: [], vessels: [], trips: [], records: null,
+          outbox: [], idmap: {}, online: navigator.onLine, lastSync: null, view: 'trips', param: null, draft: null, flash: null, syncing: false, needLogin: false };
+
+function raw(path, opts, timeoutMs) {
+  var ctl = new AbortController(), timer = setTimeout(function () { ctl.abort(); }, timeoutMs || 20000);
+  opts = opts || {}; opts.signal = ctl.signal;
+  return fetch(S.cfg.url + path, opts).then(function (r) { clearTimeout(timer); S.online = true; return r; },
+    function () { clearTimeout(timer); throw new NetErr(); });
+}
+function saveSession(s) { S.session = s; if (s) localStorage.setItem('ct.session', JSON.stringify(s)); else localStorage.removeItem('ct.session'); }
+function signIn(email, password) {
+  return raw('/auth/v1/token?grant_type=password', { method: 'POST', headers: { apikey: S.cfg.key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim().toLowerCase(), password: password }) }).then(function (r) {
+    return r.json().then(null, function () { throw new NetErr('Connection lost'); }).then(function (j) {
+      if (!r.ok) { if (r.status >= 500) throw new NetErr(); throw new ApiErr(j.error_description || j.msg || 'Sign-in failed', j.error, r.status); }
+      saveSession(j); S.needLogin = false; return j;
+    });
+  });
+}
+var refreshing = null;
+function refreshToken() {
+  if (refreshing) return refreshing;
+  refreshing = raw('/auth/v1/token?grant_type=refresh_token', { method: 'POST', headers: { apikey: S.cfg.key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: S.session.refresh_token }) }).then(function (r) {
+    return r.json().then(null, function () { throw new NetErr('Connection lost'); }).then(function (j) {
+      if (!r.ok) { if (r.status >= 500 || r.status === 429) throw new NetErr(); throw new AuthErr(); }
+      saveSession(j); return j;
+    });
+  }).then(function (j) { refreshing = null; return j; }, function (e) { refreshing = null; throw e; });
+  return refreshing;
+}
+function authed(path, opts, retried) {
+  if (!S.session) return Promise.reject(new AuthErr());
+  var pre = (S.session.expires_at && S.session.expires_at - Date.now() / 1000 < 60) ? refreshToken() : Promise.resolve();
+  return pre.then(function () {
+    opts.headers = Object.assign({}, opts.headers, { apikey: S.cfg.key, Authorization: 'Bearer ' + S.session.access_token });
+    return raw(path, opts);
+  }).then(function (r) {
+    if (r.status === 401 && !retried) return refreshToken().then(function () { return authed(path, opts, true); });
+    return r.text().then(null, function () { throw new NetErr('Connection lost'); }).then(function (t) {
+      var j = null; try { j = t ? JSON.parse(t) : null; } catch (e) { /* not json */ }
+      if (r.ok) return j;
+      if (r.status === 401) throw new AuthErr();
+      // Go by the database's own error code, not the HTTP status: the hosted
+      // gateway answers "record not found" (P0002) with status 500, which is a
+      // refusal, while a deadlock or timeout also arrives as 500 and should be
+      // tried again.
+      var msg = String((j && j.message) || 'Request refused').replace(/^catchtrace:\s*/, '');
+      var sqlstate = j && typeof j.code === 'string' && /^[0-9A-Z]{5}$/.test(j.code) ? j.code : null;
+      if (sqlstate && !/^(08|40|53|55|57|58|XX)/.test(sqlstate)) throw new ApiErr(msg, sqlstate, r.status);
+      if (r.status >= 500 || r.status === 408 || r.status === 429) throw new NetErr('Server busy');
+      throw new ApiErr(msg, j && j.code, r.status);
+    });
+  });
+}
+function rpc(fn, args) { return authed('/rest/v1/rpc/' + fn, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Profile': 'catchtrace' }, body: JSON.stringify(args || {}) }); }
+function get(table, query) { return authed('/rest/v1/' + table + '?' + query, { method: 'GET', headers: { 'Accept-Profile': 'catchtrace' } }); }
+
+// ------------------------------------------------------------ cached data
+function ukey(k) { return 'u:' + S.session.user.id + ':' + k; }
+function loadCache() {
+  return Promise.all([DB.get('kv', ukey('ctx')), DB.get('kv', ukey('ref')), DB.get('kv', ukey('idmap')), DB.get('kv', ukey('org')), DB.all('outbox')]).then(function (v) {
+    S.ctx = v[0] || null; S.ref = v[1] || null; S.idmap = v[2] || {}; S.org = v[3] || null;
+    S.outbox = (v[4] || []).filter(function (i) { return i.uid === S.session.user.id; }).sort(function (a, b) { return a.seq - b.seq; });
+    pickOrg();
+    return S.org ? DB.get('kv', ukey('reg:' + S.org)) : null;
+  }).then(function (reg) { reg = reg || {}; S.fishers = reg.fishers || []; S.vessels = reg.vessels || []; S.trips = reg.trips || []; S.records = reg.records || null; S.site = reg.site || null; });
+}
+function saveReg() { if (!S.org) return Promise.resolve(); return DB.put('kv', { fishers: S.fishers, vessels: S.vessels, trips: S.trips, records: S.records, site: S.site }, ukey('reg:' + S.org)); }
+function memberships() { return (S.ctx && S.ctx.memberships) || []; }
+function workOrgs() { var seen = {}, out = []; memberships().forEach(function (m) { if (['clerk', 'org_admin', 'verifier'].indexOf(m.role) >= 0 && !seen[m.organization_id]) { seen[m.organization_id] = 1; out.push(m); } }); return out; }
+function pickOrg() { var o = workOrgs(); if (!o.some(function (m) { return m.organization_id === S.org; })) S.org = o.length ? o[0].organization_id : null; }
+function roles() { return memberships().filter(function (m) { return m.organization_id === S.org; }).map(function (m) { return m.role; }); }
+function canClerk() { var r = roles(); return r.indexOf('clerk') >= 0 || r.indexOf('org_admin') >= 0; }
+function canVerify() { return roles().indexOf('verifier') >= 0; }
+function orgName() { var m = memberships().filter(function (x) { return x.organization_id === S.org; })[0]; return m ? m.organization : ''; }
+
+function refreshAll() {
+  return rpc('my_context').then(function (ctx) {
+    S.ctx = ctx; pickOrg();
+    return Promise.all([
+      get('species', 'select=id,common_name_en,common_name_sw,category,is_demo&order=common_name_en.asc'),
+      get('gear_types', 'select=id,code,name&order=name.asc'),
+      get('landing_sites', 'select=id,name,county_id,status,is_demo&status=eq.active&order=name.asc'),
+      get('fishing_areas', 'select=id,code,name&order=name.asc'),
+      get('organizations', 'select=id,name,org_type,status&status=eq.active&org_type=in.(buyer,processor,cooperative,bmu)&order=name.asc'),
+      get('weight_units', 'select=code,name&order=code.asc')
+    ]);
+  }).then(function (v) {
+    S.ref = { species: v[0], gear: v[1], sites: v[2], areas: v[3], orgs: v[4], units: v[5], at: Date.now() };
+    return Promise.all([DB.put('kv', S.ctx, ukey('ctx')), DB.put('kv', S.ref, ukey('ref')), DB.put('kv', S.org, ukey('org'))]);
+  }).then(function () { return S.org ? refreshReg() : null; });
+}
+function refreshReg() {
+  var org = S.org;
+  return Promise.all([
+    get('fishers', 'select=id,full_name,member_no,home_organization_id&status=eq.active&order=full_name.asc'),
+    get('vessels', 'select=id,name,registration_no,home_landing_site_id&status=eq.active&organization_id=eq.' + org + '&order=name.asc'),
+    get('fishing_trips', 'select=id,trip_ref,fisher_id,vessel_id,departed_at,status&status=eq.open&organization_id=eq.' + org + '&order=departed_at.desc'),
+    get('catch_records', 'select=id,catch_ref,species_id,weight_kg,verification_level,created_by,created_at,disputed_at,status&organization_id=eq.' + org + '&order=created_at.desc&limit=50')
+  ]).then(function (v) { if (org !== S.org) return; S.fishers = v[0]; S.vessels = v[1]; S.trips = v[2]; S.records = v[3]; return saveReg(); });
+}
+
+// ------------------------------------------------------------------ outbox
+// Every write is first saved on the device with its own client id, then sent.
+// The server keeps the client id, so sending the same item twice changes nothing.
+var seqBase = 0;
+function enqueue(op, args, label, cid) {
+  var it = { cid: cid || uuid(), seq: Date.now() * 100 + (seqBase++ % 100), uid: S.session.user.id, org: S.org, op: op, args: args, label: label,
+             state: 'pending', attempts: 0, created_at: new Date().toISOString() };
+  if (S.outbox.some(function (x) { return x.cid === it.cid; })) return Promise.resolve(it);   // double tap
+  S.outbox.push(it);
+  return DB.put('outbox', it).then(function () { paintStatus(); setTimeout(sync, 0); return it; });
+}
+function resolve(v) {
+  if (typeof v !== 'string') return { ok: true, v: v };
+  var key = null, dep = null;
+  if (v.indexOf('tmp:') === 0) { key = v.slice(4); dep = key; }
+  else if (v.indexOf('tmpcatch:') === 0) { var p = v.split(':'); key = 'catch:' + p[1] + ':' + p[2]; dep = p[1]; }
+  else return { ok: true, v: v };
+  if (S.idmap[key]) return { ok: true, v: S.idmap[key] };
+  var d = S.outbox.filter(function (x) { return x.cid === dep; })[0];
+  return { ok: false, wait: d && d.state === 'pending' ? 'Waiting for: ' + d.label : 'Depends on an item that failed or was removed' };
+}
+function resolveArgs(args) {
+  var out = {}, wait = null;
+  Object.keys(args).forEach(function (k) { var r = resolve(args[k]); if (r.ok) out[k] = r.v; else wait = r.wait; });
+  return wait ? { ok: false, wait: wait } : { ok: true, args: out };
+}
+function real(id) { var r = resolve(id); return r.ok ? r.v : id; }
+function applyResult(it, res) {
+  var a = it.args;
+  if (it.op === 'register_fisher') { S.idmap[it.cid] = res.fisher_id; S.fishers.push({ id: res.fisher_id, full_name: res.full_name, member_no: a.p_member_no, home_organization_id: a.p_org }); }
+  if (it.op === 'register_vessel') { S.idmap[it.cid] = res.vessel_id; S.vessels.push({ id: res.vessel_id, name: res.name, registration_no: res.registration_no, home_landing_site_id: a.p_home_site_id }); }
+  if (it.op === 'register_trip') { S.idmap[it.cid] = res.trip_id; S.trips.unshift({ id: res.trip_id, trip_ref: res.trip_ref, fisher_id: real(a.p_fisher_id), vessel_id: real(a.p_vessel_id), departed_at: a.p_departed_at, status: 'open' }); }
+  if (it.op === 'submit_landing') { (res.catches || []).forEach(function (c, i) { S.idmap['catch:' + it.cid + ':' + i] = c.catch_id; }); var t = real(a.p_trip_id); S.trips = S.trips.filter(function (x) { return x.id !== t; }); }
+}
+function sync() {
+  if (S.syncing || !S.session) return Promise.resolve();
+  var todo = S.outbox.filter(function (i) { return i.state === 'pending'; });
+  if (!todo.length) return Promise.resolve();
+  S.syncing = true; paintStatus();
+  var sent = 0, stop = false;
+  var chain = todo.reduce(function (p, it) {
+    return p.then(function () {
+      if (stop) return;
+      var r = resolveArgs(it.args);
+      if (!r.ok) { it.wait = r.wait; return DB.put('outbox', it); }
+      it.wait = null; it.attempts++;
+      return rpc(it.op, r.args).then(function (res) {
+        it.state = 'done'; it.result = res; it.done_at = new Date().toISOString(); it.error = null; sent++;
+        applyResult(it, res || {});
+        return Promise.all([DB.put('outbox', it), DB.put('kv', S.idmap, ukey('idmap')), saveReg()]);
+      }, function (e) {
+        if (e instanceof AuthErr) { S.needLogin = true; stop = true; return DB.put('outbox', it); }
+        // "Not accepted" is only for a refusal by the database rules themselves
+        // (a five-character SQLSTATE). A dropped connection, a busy server or a
+        // gateway/configuration error keeps the item waiting - it is never lost.
+        if (e instanceof ApiErr && /^[0-9A-Z]{5}$/.test(e.code || '')) {
+          it.state = 'failed'; it.error = e.message || 'Refused'; it.code = e.code;
+          return DB.put('outbox', it);
+        }
+        if (e instanceof NetErr) S.online = navigator.onLine && e.message !== 'No connection';
+        stop = true; it.last_error = (e && e.message) || 'Could not send';
+        return DB.put('outbox', it);
+      });
+    });
+  }, Promise.resolve());
+  return chain.then(function () {
+    S.syncing = false; S.lastSync = new Date().toISOString();
+    if (sent && !stop) return refreshReg().catch(function () { /* stays on cached data */ });
+  }, function () { S.syncing = false; }).then(function () {
+    prune(); paintStatus(); softRender();
+    // items that were waiting on something just sent get their turn now
+    if (sent && !stop && S.outbox.some(function (i) { return i.state === 'pending' && i.wait && i.wait.indexOf('Waiting') === 0; })) return sync();
+  });
+}
+function prune() {
+  var cutoff = Date.now() - 7 * 864e5;
+  S.outbox.filter(function (i) { return i.state === 'done' && Date.parse(i.done_at) < cutoff; }).forEach(function (i) { DB.del('outbox', i.cid); });
+  S.outbox = S.outbox.filter(function (i) { return !(i.state === 'done' && Date.parse(i.done_at) < cutoff); });
+}
+function pendingCount() { return S.outbox.filter(function (i) { return i.state === 'pending'; }).length; }
+function failedCount() { return S.outbox.filter(function (i) { return i.state === 'failed'; }).length; }
+
+// ------------------------------------------------- lists incl. unsent items
+function unsent(op) { return S.outbox.filter(function (i) { return i.op === op && i.state !== 'done' && i.org === S.org; }); }
+function allFishers() { return S.fishers.concat(unsent('register_fisher').map(function (i) { return { id: 'tmp:' + i.cid, full_name: i.args.p_full_name, member_no: i.args.p_member_no, unsent: i.state }; })); }
+function allVessels() { return S.vessels.concat(unsent('register_vessel').map(function (i) { return { id: 'tmp:' + i.cid, name: i.args.p_name, registration_no: i.args.p_registration_no, home_landing_site_id: i.args.p_home_site_id, unsent: i.state }; })); }
+function openTrips() {
+  var landed = {};
+  S.outbox.forEach(function (i) { if (i.op === 'submit_landing' && i.state !== 'failed') landed[real(i.args.p_trip_id)] = 1; });
+  var t = unsent('register_trip').map(function (i) { return { id: 'tmp:' + i.cid, trip_ref: null, fisher_id: real(i.args.p_fisher_id), vessel_id: real(i.args.p_vessel_id), departed_at: i.args.p_departed_at, unsent: i.state }; }).concat(S.trips);
+  return t.filter(function (x) { return !landed[x.id]; });
+}
+function byId(list, id) { id = real(id); return list.filter(function (x) { return x.id === id || real(x.id) === id; })[0]; }
+function fisherName(id) { var f = byId(allFishers(), id); return f ? f.full_name : 'Fisher'; }
+function vesselName(id) { var v = byId(allVessels(), id); return v ? v.name : 'Vessel'; }
+function speciesName(id) { var s = ((S.ref && S.ref.species) || []).filter(function (x) { return x.id === id; })[0]; return s ? (s.common_name_sw ? s.common_name_sw + ' / ' : '') + s.common_name_en : 'Species'; }
+function opts(list, val, label, sel, blank) {
+  return (blank === false ? '' : '<option value="">' + esc(blank || 'Select...') + '</option>') + list.map(function (x) { var v = val(x); return '<option value="' + esc(v) + '"' + (v === sel ? ' selected' : '') + '>' + esc(label(x)) + '</option>'; }).join('');
+}
+
+// ------------------------------------------------------------------- views
+function paintStatus() {
+  var el = $('#hdr-status'), p = pendingCount(), f = failedCount();
+  var on = S.online && navigator.onLine;
+  el.className = 'pill' + (f ? ' warn' : on ? '' : ' off');
+  el.textContent = (on ? 'Online' : 'Offline') + (p ? ' - ' + p + ' to send' : '') + (f ? ' - ' + f + ' failed' : '');
+  el.setAttribute('data-pending', p); el.setAttribute('data-failed', f); el.setAttribute('data-syncing', S.syncing ? '1' : '0');
+  $('#hdr-org').textContent = S.session ? (orgName() || 'No organisation') : 'Landing site';
+  // Anything that is not the production system says so on every screen.
+  var env = S.cfg && S.cfg.env;
+  $('header .t').textContent = 'CatchTrace' + (env && env !== 'production' ? ' - ' + String(env).toUpperCase() : '');
+}
+function softRender() { if (['trips', 'records', 'sync', 'account'].indexOf(S.view) >= 0) render(); }
+function go(view, param) { S.view = view; S.param = param || null; S.draft = null; render(); window.scrollTo(0, 0); }
+function flash() { var f = S.flash; S.flash = null; return f ? '<div class="msg ' + f.kind + '" id="flash">' + esc(f.text) + '</div>' : ''; }
+function render() {
+  paintStatus();
+  var v = $('#view'), tabs = $('#tabs');
+  if (!S.session) { tabs.className = 'hide'; v.innerHTML = viewLogin(); return; }
+  tabs.className = '';
+  Array.prototype.forEach.call(tabs.querySelectorAll('button'), function (b) { b.className = b.getAttribute('data-view') === S.view ? 'on' : ''; });
+  var fn = { trips: viewTrips, newtrip: viewNewTrip, landing: viewLanding, records: viewRecords, sync: viewSync, account: viewAccount }[S.view] || viewTrips;
+  v.innerHTML = (S.needLogin ? '<div class="msg err">Your sign-in has expired. Saved items are safe on this device. <button class="small" data-act="relogin">Sign in again</button></div>' : '') + flash() + fn();
+  if (S.view === 'landing' && $('#lines') && !$('#lines').children.length) addLine();
+}
+function viewLogin() {
+  return '<h2>Sign in</h2>' + flash() + '<form data-form="login" class="card">' +
+    '<label for="email">Email</label><input id="email" type="email" autocomplete="username" required>' +
+    '<label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required>' +
+    '<div style="height:12px"></div><button class="big" type="submit">Sign in</button>' +
+    '<p class="muted">A connection is needed to sign in. After that, trips and landings can be recorded without one.</p></form>';
+}
+function viewTrips() {
+  if (!S.org) return '<div class="msg info">This account is not yet a member of any organisation. Ask your BMU or cooperative administrator to add you.</div>';
+  var h = '';
+  if (!S.ref) h += '<div class="msg info">Reference lists have not been downloaded yet. Connect once to download them.</div>';
+  if (canClerk()) h += '<button class="big" data-act="go" data-view="newtrip" id="btn-new-trip">+ New fishing trip</button><div style="height:12px"></div>';
+  var t = openTrips();
+  h += '<h2>At sea (' + t.length + ')</h2>';
+  if (!t.length) h += '<p class="muted">No open trips.</p>';
+  t.forEach(function (x) {
+    h += '<div class="card" data-trip="' + esc(x.id) + '"><div class="row"><div><strong>' + esc(vesselName(x.vessel_id)) + '</strong><br>' + esc(fisherName(x.fisher_id)) +
+      '<div class="muted">Left ' + esc(fmtTime(x.departed_at)) + ' - ' + (x.trip_ref ? '<span class="ref">' + esc(x.trip_ref) + '</span>' : '<span class="badge ' + (x.unsent === 'failed' ? 'bad">Not accepted - see Sync' : 'wait">Not yet sent') + '</span>') + '</div></div></div>' +
+      (canClerk() ? '<div style="height:8px"></div><div class="row"><button data-act="land" data-id="' + esc(x.id) + '" style="flex:1">Record landing</button>' +
+        (x.trip_ref ? '<button class="danger small" data-act="cancel-open" data-id="' + esc(x.id) + '">Cancel</button>' : '') + '</div>' +
+        '<form class="hide" data-form="cancel" data-id="' + esc(x.id) + '"><label>Reason for cancelling</label><input name="reason" required minlength="5"><div style="height:8px"></div><button class="danger" type="submit">Confirm cancel</button></form>' : '') +
+      '</div>';
+  });
+  return h;
+}
+function viewNewTrip() {
+  var d = S.draft || (S.draft = { cid: uuid(), fisher: null, vessel: null });
+  var f = d.fisher ? byId(allFishers(), d.fisher) : null;
+  var h = '<h2>New fishing trip</h2><form data-form="trip" novalidate>';
+  h += '<div class="card"><label>Fisher</label>';
+  if (f) h += '<div class="row"><div><strong id="fisher-chosen">' + esc(f.full_name) + '</strong>' + (f.member_no ? ' <span class="muted">' + esc(f.member_no) + '</span>' : '') + (f.unsent ? ' <span class="badge wait">Not yet sent</span>' : '') + '</div><button type="button" class="sec small" data-act="fisher-clear">Change</button></div>';
+  else h += '<input id="fisher-q" placeholder="Type a name or member number" autocomplete="off"><div id="fisher-res" class="pick"></div>' +
+    '<div style="height:8px"></div><button type="button" class="sec small" data-act="fisher-new">+ Register a new fisher</button>' +
+    '<div id="fisher-form" class="hide"><label>Full name</label><input id="nf-name"><div class="grid2"><div><label>Member no.</label><input id="nf-member"></div><div><label>Licence no.</label><input id="nf-licence"></div></div><label>Phone</label><input id="nf-phone" type="tel" inputmode="tel"><div style="height:8px"></div><button type="button" data-act="fisher-save">Save fisher</button></div>';
+  h += '</div><div class="card"><label for="vessel">Vessel</label><select id="vessel">' + opts(allVessels(), function (x) { return x.id; }, function (x) { return x.name + (x.registration_no ? ' (' + x.registration_no + ')' : '') + (x.unsent ? ' - not yet sent' : ''); }, d.vessel) + '</select>' +
+    '<div style="height:8px"></div><button type="button" class="sec small" data-act="vessel-new">+ Register a new vessel</button>' +
+    '<div id="vessel-form" class="hide"><label>Vessel name</label><input id="nv-name"><div class="grid2"><div><label>Registration no.</label><input id="nv-reg"></div><div><label>Type</label><input id="nv-type" placeholder="e.g. ngalawa"></div></div>' +
+    '<label>Propulsion</label><select id="nv-prop"><option value="">Select...</option><option value="none">None (paddle)</option><option value="sail">Sail</option><option value="outboard">Outboard engine</option><option value="inboard">Inboard engine</option></select><div style="height:8px"></div><button type="button" data-act="vessel-save">Save vessel</button></div></div>';
+  var r = S.ref || { gear: [], areas: [], sites: [] };
+  h += '<div class="card"><label for="departed">Departure date and time</label><input id="departed" type="datetime-local" value="' + esc(d.departed || nowLocal()) + '" required>' +
+    '<label for="gear">Fishing gear</label><select id="gear">' + opts(r.gear, function (x) { return x.id; }, function (x) { return x.name; }, d.gear) + '</select>' +
+    '<label for="area">Fishing area</label><select id="area">' + opts(r.areas, function (x) { return x.id; }, function (x) { return x.name; }, d.area) + '</select>' +
+    '<label for="dsite">Leaving from</label><select id="dsite">' + opts(r.sites, function (x) { return x.id; }, function (x) { return x.name; }, d.dsite || S.site) + '</select>' +
+    '<label for="crew">Crew (estimate)</label><input id="crew" type="number" inputmode="numeric" min="1" max="200" value="' + esc(d.crew || '') + '"></div>';
+  h += '<div id="form-err"></div><button class="big" type="submit" id="btn-trip-submit">Register trip</button><div style="height:8px"></div><button type="button" class="sec big" data-act="go" data-view="trips">Back</button></form>';
+  return h;
+}
+function keepTripDraft() { var d = S.draft; if (!d) return; ['vessel', 'departed', 'gear', 'area', 'dsite', 'crew'].forEach(function (k) { var el = $('#' + k); if (el) d[k] = el.value; }); }
+function viewLanding() {
+  var t = byId(openTrips(), S.param);
+  if (!t) return '<div class="msg info">This trip is no longer open.</div><button class="sec big" data-act="go" data-view="trips">Back</button>';
+  var d = S.draft || (S.draft = { cid: uuid(), saleCids: {} });
+  var v = byId(allVessels(), t.vessel_id), r = S.ref || { sites: [] };
+  return '<h2>Record landing</h2><div class="card"><strong>' + esc(vesselName(t.vessel_id)) + '</strong> - ' + esc(fisherName(t.fisher_id)) + '<div class="muted">Left ' + esc(fmtTime(t.departed_at)) + (t.trip_ref ? ' - <span class="ref">' + esc(t.trip_ref) + '</span>' : '') + '</div></div>' +
+    '<form data-form="landing" novalidate><div class="card"><label for="lsite">Landing site</label><select id="lsite" required>' + opts(r.sites, function (x) { return x.id; }, function (x) { return x.name; }, S.site || (v && v.home_landing_site_id)) + '</select>' +
+    '<label for="landed">Landing date and time</label><input id="landed" type="datetime-local" value="' + esc(nowLocal()) + '" required></div>' +
+    '<h3>Catch</h3><div id="lines"></div><button type="button" class="sec" data-act="line-add" id="btn-line-add">+ Add another species</button>' +
+    '<div class="card" style="margin-top:10px"><div class="row"><strong>Total</strong><strong id="total">0 kg</strong></div></div>' +
+    '<div id="form-err"></div><button class="big" type="submit" id="btn-landing-submit">Submit landing</button><div style="height:8px"></div><button type="button" class="sec big" data-act="go" data-view="trips">Back</button></form>';
+}
+function addLine() {
+  var r = S.ref || { species: [], units: [{ code: 'kg', name: 'Kilogram' }], orgs: [] };
+  var div = document.createElement('div'); div.className = 'line';
+  div.innerHTML = '<label>Species</label><select class="l-species">' + opts(r.species, function (x) { return x.id; }, function (x) { return (x.common_name_sw ? x.common_name_sw + ' / ' : '') + x.common_name_en; }) + '</select>' +
+    '<div class="grid2"><div><label>Weight</label><input class="l-weight" type="number" inputmode="decimal" step="0.001" min="0"></div><div><label>Unit</label><select class="l-unit">' + opts(r.units, function (x) { return x.code; }, function (x) { return x.name; }, 'kg', false) + '</select></div></div>' +
+    '<div class="grid2"><div><label>How weighed</label><select class="l-method"><option value="measured">Weighed on a scale</option><option value="estimated">Estimated</option></select></div><div><label>Number of fish</label><input class="l-count" type="number" inputmode="numeric" min="0"></div></div>' +
+    '<label>Condition</label><select class="l-cond"><option value="fresh">Fresh</option><option value="iced">Iced</option><option value="live">Live</option><option value="frozen">Frozen</option><option value="damaged">Damaged</option><option value="other">Other</option></select>' +
+    '<label>First buyer (if known)</label><select class="l-buyer">' + opts(r.orgs.filter(function (o) { return o.id !== S.org; }), function (x) { return x.id; }, function (x) { return x.name; }, null, 'Not known yet') + '</select>' +
+    '<div class="l-pricewrap hide"><label>Price per kg (KES, optional)</label><input class="l-price" type="number" inputmode="decimal" step="0.01" min="0"></div>' +
+    '<div style="height:8px"></div><button type="button" class="danger small" data-act="line-del">Remove this species</button>';
+  $('#lines').appendChild(div);
+}
+function readLines() {
+  var factor = { kg: 1, g: 0.001, t: 1000, lb: 0.45359237 };
+  return Array.prototype.map.call(document.querySelectorAll('#lines .line'), function (el) {
+    var w = parseFloat($('.l-weight', el).value), unit = $('.l-unit', el).value, cnt = $('.l-count', el).value, price = $('.l-price', el).value;
+    return { species_id: $('.l-species', el).value, weight_value: w, weight_unit: unit, weight_method: $('.l-method', el).value,
+             quantity_count: cnt === '' ? null : parseInt(cnt, 10), condition: $('.l-cond', el).value,
+             buyer: $('.l-buyer', el).value || null, price: price === '' ? null : parseFloat(price), approx_kg: (isFinite(w) ? w : 0) * (factor[unit] || 1) };
+  });
+}
+function paintTotal() { var t = readLines().reduce(function (s, l) { return s + l.approx_kg; }, 0); var el = $('#total'); if (el) el.textContent = kg(t) + ' kg'; }
+function levelBadge(c) {
+  if (c.status === 'void') return '<span class="badge bad">Void</span>';
+  if (c.disputed_at) return '<span class="badge bad">Rejected by a verifier</span>';
+  var m = { unverified: ['', 'Not verified'], community_verified: ['ok', 'Community verified'], document_verified: ['ok', 'Document verified'], officially_verified: ['ok', 'Officially verified'] }[c.verification_level] || ['', c.verification_level];
+  return '<span class="badge ' + m[0] + '">' + esc(m[1]) + '</span>';
+}
+function viewRecords() {
+  var h = '<div class="row"><h2>Recent catch records</h2><button class="sec small" data-act="records-refresh">Refresh</button></div>';
+  if (!S.records) return h + '<p class="muted">Connect to load records.</p>';
+  if (!S.records.length) return h + '<p class="muted">No catch records yet.</p>';
+  S.records.forEach(function (c) {
+    var mine = c.created_by === S.session.user.id;
+    h += '<div class="card" data-catch="' + esc(c.catch_ref) + '"><div class="row"><div><span class="ref">' + esc(c.catch_ref) + '</span><br><strong>' + esc(speciesName(c.species_id)) + '</strong> - ' + esc(kg(c.weight_kg)) + ' kg<div class="muted">' + esc(fmtTime(c.created_at)) + '</div></div><div>' + levelBadge(c) + '</div></div>';
+    if (canVerify() && c.status === 'recorded' && c.verification_level === 'unverified' && !c.disputed_at) {
+      h += mine ? '<p class="muted">You entered this record, so another verifier must check it.</p>' :
+        '<div style="height:8px"></div><div class="row"><button data-act="verify" data-id="' + esc(c.id) + '" style="flex:1">Confirm (community)</button><button class="danger small" data-act="reject-open" data-id="' + esc(c.id) + '">Reject</button></div>' +
+        '<form class="hide" data-form="reject" data-id="' + esc(c.id) + '"><label>What is wrong with this record?</label><input name="note" required minlength="5"><div style="height:8px"></div><button class="danger" type="submit">Confirm rejection</button></form>';
+    }
+    h += '</div>';
+  });
+  return h;
+}
+function viewSync() {
+  var p = S.outbox.filter(function (i) { return i.state === 'pending'; }), f = S.outbox.filter(function (i) { return i.state === 'failed'; }),
+      d = S.outbox.filter(function (i) { return i.state === 'done'; }).slice(-20).reverse();
+  var h = '<div class="row"><h2>Sync</h2><button data-act="sync-now" id="btn-sync"' + (S.syncing ? ' disabled' : '') + '>' + (S.syncing ? 'Sending...' : 'Send now') + '</button></div>' +
+    '<p class="muted">' + (S.lastSync ? 'Last attempt ' + esc(fmtTime(S.lastSync)) : 'Nothing sent yet this session') + '. Items stay on this device until the server confirms them.</p>';
+  h += '<h3>Waiting to send (' + p.length + ')</h3>' + (p.length ? '' : '<p class="muted">Nothing waiting.</p>');
+  p.forEach(function (i) { h += '<div class="card"><strong>' + esc(i.label) + '</strong><div class="muted">Saved ' + esc(fmtTime(i.created_at)) + (i.wait ? ' - ' + esc(i.wait) : '') + (i.last_error && i.attempts > 1 ? ' - last attempt: ' + esc(i.last_error) : '') + '</div>' + (i.wait && i.wait.indexOf('Depends') === 0 ? '<div style="height:8px"></div><button class="danger small" data-act="discard" data-id="' + esc(i.cid) + '">Remove</button>' : '') + '</div>'; });
+  h += '<h3>Not accepted (' + f.length + ')</h3>' + (f.length ? '' : '<p class="muted">None.</p>');
+  f.forEach(function (i) {
+    h += '<div class="card" data-failed="' + esc(i.op) + '"><strong>' + esc(i.label) + '</strong><div class="msg err" style="margin:8px 0">' + esc(i.error) + '</div><div class="row">' +
+      '<button class="sec small" data-act="retry" data-id="' + esc(i.cid) + '">Try again</button>' +
+      (i.op === 'register_fisher' && i.code === '23505' ? '<button class="small" data-act="confirm-dup" data-id="' + esc(i.cid) + '">Different person - add anyway</button>' : '') +
+      '<button class="danger small" data-act="discard" data-id="' + esc(i.cid) + '">Remove</button></div></div>';
+  });
+  h += '<h3>Sent</h3>' + (d.length ? '' : '<p class="muted">Nothing yet.</p>');
+  d.forEach(function (i) {
+    var ref = i.result ? (i.result.trip_ref || i.result.landing_ref || i.result.txn_ref || '') : '';
+    var cats = i.result && i.result.catches ? i.result.catches.map(function (c) { return c.catch_ref; }).join(', ') : '';
+    h += '<div class="card"><strong>' + esc(i.label) + '</strong> <span class="badge ok">Sent</span><div class="muted">' + (ref ? '<span class="ref">' + esc(ref) + '</span> ' : '') + (cats ? '<span class="ref">' + esc(cats) + '</span>' : '') + '</div></div>';
+  });
+  return h;
+}
+function viewAccount() {
+  var o = workOrgs();
+  return '<h2>Account</h2><div class="card"><div>' + esc(S.session.user.email) + '</div><div class="muted">Roles here: ' + esc(roles().join(', ') || 'none') + '</div>' +
+    (o.length > 1 ? '<label for="org">Working for</label><select id="org" data-change="org">' + opts(o, function (m) { return m.organization_id; }, function (m) { return m.organization; }, S.org, false) + '</select>' : '') + '</div>' +
+    '<div class="card"><button class="sec big" data-act="refresh">Download latest lists</button><p class="muted">Species, gear, landing sites, fishers and vessels' + (S.ref ? ' - last downloaded ' + esc(fmtTime(new Date(S.ref.at).toISOString())) : '') + '.</p></div>' +
+    '<div class="card"><button class="danger big" data-act="signout">Sign out</button></div><p class="muted">Version ' + VERSION + '</p>';
+}
+function formErr(m) { var el = $('#form-err'); if (el) { el.innerHTML = m ? '<div class="msg err">' + esc(m) + '</div>' : ''; if (m) el.scrollIntoView({ block: 'center' }); } }
+
+// ----------------------------------------------------------------- actions
+function paintFisherResults() {
+  var q = ($('#fisher-q').value || '').trim().toLowerCase(), box = $('#fisher-res');
+  if (q.length < 2) { box.innerHTML = ''; return; }
+  var hits = allFishers().filter(function (f) { return f.full_name.toLowerCase().indexOf(q) >= 0 || (f.member_no || '').toLowerCase().indexOf(q) >= 0; }).slice(0, 8);
+  box.innerHTML = hits.length ? hits.map(function (f) { return '<button type="button" data-act="fisher-pick" data-id="' + esc(f.id) + '">' + esc(f.full_name) + (f.member_no ? ' - ' + esc(f.member_no) : '') + (f.unsent ? ' (not yet sent)' : '') + '</button>'; }).join('') : '<div class="muted" style="padding:10px">No match. Register a new fisher below.</div>';
+}
+var ACT = {
+  go: function (el) { go(el.getAttribute('data-view')); },
+  relogin: function () { saveSessionKeepQueue(); },
+  land: function (el) { go('landing', el.getAttribute('data-id')); },
+  'cancel-open': function (el) { var f = el.closest('.card').querySelector('form[data-form=cancel]'); f.className = f.className ? '' : 'hide'; },
+  'reject-open': function (el) { var f = el.closest('.card').querySelector('form[data-form=reject]'); f.className = f.className ? '' : 'hide'; },
+  'fisher-pick': function (el) { keepTripDraft(); S.draft.fisher = el.getAttribute('data-id'); render(); },
+  'fisher-clear': function () { keepTripDraft(); S.draft.fisher = null; render(); },
+  'fisher-new': function () { $('#fisher-form').className = ''; $('#nf-name').value = $('#fisher-q').value; $('#nf-name').focus(); },
+  'fisher-save': function () {
+    var name = $('#nf-name').value.trim().replace(/\s+/g, ' ');
+    if (name.length < 3) return formErr('Enter the fisher\'s full name.');
+    var phone = $('#nf-phone').value.replace(/[\s-]/g, '');
+    if (phone && !/^\+?[0-9]{7,15}$/.test(phone)) return formErr('The phone number should be 7 to 15 digits.');
+    keepTripDraft(); var d = S.draft, cid = uuid();
+    enqueue('register_fisher', { p_org: S.org, p_full_name: name, p_member_no: $('#nf-member').value.trim() || null, p_license_no: $('#nf-licence').value.trim() || null, p_phone: phone || null, p_client_id: cid, p_confirm_duplicate: false }, 'Register fisher: ' + name, cid)
+      .then(function () { S.draft = d; d.fisher = 'tmp:' + cid; S.view = 'newtrip'; render(); });
+  },
+  'vessel-new': function () { $('#vessel-form').className = ''; $('#nv-name').focus(); },
+  'vessel-save': function () {
+    var name = $('#nv-name').value.trim();
+    if (name.length < 2) return formErr('Enter the vessel name.');
+    keepTripDraft(); var d = S.draft, cid = uuid();
+    enqueue('register_vessel', { p_org: S.org, p_name: name, p_registration_no: $('#nv-reg').value.trim() || null, p_vessel_type: $('#nv-type').value.trim() || null, p_length_m: null, p_propulsion: $('#nv-prop').value || null, p_owner_fisher_id: null, p_home_site_id: d.dsite || S.site || null, p_client_id: cid }, 'Register vessel: ' + name, cid)
+      .then(function () { S.draft = d; d.vessel = 'tmp:' + cid; S.view = 'newtrip'; render(); });
+  },
+  'line-add': function () { addLine(); },
+  'line-del': function (el) { if (document.querySelectorAll('#lines .line').length > 1) { el.closest('.line').remove(); paintTotal(); } },
+  'sync-now': function () { sync().then(render); render(); },
+  retry: function (el) { var it = item(el); it.state = 'pending'; it.error = null; paintStatus(); DB.put('outbox', it).then(function () { render(); sync(); }); },
+  'confirm-dup': function (el) { var it = item(el); it.args.p_confirm_duplicate = true; it.state = 'pending'; it.error = null; paintStatus(); DB.put('outbox', it).then(function () { render(); sync(); }); },
+  discard: function (el) { var it = item(el); S.outbox = S.outbox.filter(function (x) { return x !== it; }); DB.del('outbox', it.cid).then(render); },
+  refresh: function () { busy(refreshAll(), 'Lists downloaded.'); },
+  'records-refresh': function () { busy(refreshReg(), null); },
+  verify: function (el) { busy(rpc('verify_catch', { p_catch_id: el.getAttribute('data-id'), p_type: 'community', p_outcome: 'verified', p_evidence_ref: null, p_note: null }).then(refreshReg), 'Catch confirmed.'); },
+  signout: function () {
+    var n = pendingCount() + failedCount();
+    if (n && !window.confirm(n + ' item(s) have not reached the server. They stay on this device and will be sent when you sign in again on it. Sign out?')) return;
+    // Fisher names and registers are removed from the device; unsent items stay.
+    var keys = ['ctx', 'ref', 'org'].concat(workOrgs().map(function (m) { return 'reg:' + m.organization_id; })).map(ukey);
+    Promise.all(keys.map(function (k) { return DB.del('kv', k); })).catch(function () {}).then(function () {
+      saveSession(null); S.ctx = null; S.ref = null; S.fishers = []; S.vessels = []; S.trips = []; S.records = null; go('trips');
+    });
+  }
+};
+function saveSessionKeepQueue() { saveSession(null); render(); }
+function item(el) { var id = el.getAttribute('data-id'); return S.outbox.filter(function (x) { return x.cid === id; })[0]; }
+function busy(p, okText) {
+  return p.then(function () { if (okText) S.flash = { kind: 'ok', text: okText }; render(); },
+    function (e) { S.flash = { kind: 'err', text: e instanceof NetErr ? 'No connection. Try again when you have signal.' : e.message }; if (e instanceof AuthErr) S.needLogin = true; render(); });
+}
+var FORMS = {
+  login: function (f) {
+    var b = f.querySelector('button'); b.disabled = true;
+    signIn($('#email').value, $('#password').value).then(function () { return loadCache(); }).then(function () {
+      render();
+      return refreshAll().then(function () { return loadCache(); }).then(function () { render(); sync(); }, function () { render(); });
+    }, function (e) { S.flash = { kind: 'err', text: e instanceof NetErr ? 'No connection. A connection is needed to sign in.' : e.message }; render(); });
+  },
+  trip: function () {
+    keepTripDraft(); var d = S.draft;
+    if (!d.fisher) return formErr('Choose the fisher.');
+    if (!d.vessel) return formErr('Choose the vessel.');
+    if (!d.departed) return formErr('Enter the departure date and time.');
+    var dep = new Date(d.departed);
+    if (dep.getTime() > Date.now() + 36e5) return formErr('The departure time is in the future.');
+    var crew = d.crew === '' || d.crew == null ? null : parseInt(d.crew, 10);
+    if (crew !== null && !(crew >= 1 && crew <= 200)) return formErr('Crew should be between 1 and 200.');
+    if (openTrips().some(function (t) { return real(t.vessel_id) === real(d.vessel); })) return formErr('This vessel already has an open trip. Record its landing or cancel it first.');
+    $('#btn-trip-submit').disabled = true;
+    if (d.dsite) { S.site = d.dsite; saveReg(); }
+    enqueue('register_trip', { p_org: S.org, p_fisher_id: d.fisher, p_vessel_id: d.vessel, p_departed_at: dep.toISOString(), p_gear_type_id: d.gear || null, p_fishing_area_id: d.area || null, p_departure_site_id: d.dsite || null, p_crew_size_est: crew, p_client_id: d.cid },
+      'Trip: ' + vesselName(d.vessel) + ' / ' + fisherName(d.fisher), d.cid).then(function () { S.flash = { kind: 'ok', text: 'Trip saved.' + (navigator.onLine ? '' : ' It will be sent when there is a connection.') }; go('trips'); });
+  },
+  landing: function () {
+    var d = S.draft, t = byId(openTrips(), S.param), site = $('#lsite').value, landed = $('#landed').value, lines = readLines();
+    if (!t) return formErr('This trip is no longer open.');
+    if (!site) return formErr('Choose the landing site.');
+    if (!landed) return formErr('Enter the landing date and time.');
+    var when = new Date(landed);
+    if (when.getTime() > Date.now() + 36e5) return formErr('The landing time is in the future.');
+    if (when.getTime() < Date.parse(t.departed_at)) return formErr('The landing time is before the departure time.');
+    for (var i = 0; i < lines.length; i++) {
+      if (!lines[i].species_id) return formErr('Choose the species on line ' + (i + 1) + '.');
+      if (!(lines[i].weight_value > 0)) return formErr('Enter a weight greater than zero on line ' + (i + 1) + '.');
+      if (lines[i].price !== null && !(lines[i].price >= 0)) return formErr('Check the price on line ' + (i + 1) + '.');
+    }
+    $('#btn-landing-submit').disabled = true;
+    S.site = site; saveReg();
+    var total = lines.reduce(function (s, l) { return s + l.approx_kg; }, 0);
+    var catches = lines.map(function (l) { return { species_id: l.species_id, weight_value: l.weight_value, weight_unit: l.weight_unit, weight_method: l.weight_method, quantity_count: l.quantity_count, condition: l.condition }; });
+    var label = 'Landing: ' + vesselName(t.vessel_id) + ' - ' + lines.length + ' species, ' + kg(total) + ' kg';
+    enqueue('submit_landing', { p_trip_id: t.id, p_landing_site_id: site, p_landed_at: when.toISOString(), p_catches: catches, p_client_id: d.cid }, label, d.cid).then(function () {
+      // First buyer, where known: one sale per line, sent after the landing.
+      return lines.reduce(function (p, l, i) {
+        if (!l.buyer) return p;
+        var scid = d.saleCids[i] || (d.saleCids[i] = uuid());
+        var buyer = (S.ref.orgs.filter(function (o) { return o.id === l.buyer; })[0] || {}).name || 'buyer';
+        return p.then(function () { return enqueue('record_sale', { p_catch_id: 'tmpcatch:' + d.cid + ':' + i, p_buyer_org: l.buyer, p_quantity_kg: Math.round(l.approx_kg * 1000) / 1000, p_unit_price_kes: l.price, p_transacted_at: when.toISOString(), p_client_id: scid }, 'First sale: ' + kg(l.approx_kg) + ' kg to ' + buyer, scid); });
+      }, Promise.resolve());
+    }).then(function () { S.flash = { kind: 'ok', text: 'Landing saved.' + (navigator.onLine ? ' See Sync for the catch references.' : ' It will be sent when there is a connection.') }; go('trips'); });
+  },
+  cancel: function (f) {
+    var id = f.getAttribute('data-id'), reason = f.querySelector('input').value.trim();
+    if (reason.length < 5) return;
+    busy(rpc('cancel_trip', { p_trip_id: id, p_reason: reason }).then(refreshReg), 'Trip cancelled.');
+  },
+  reject: function (f) {
+    var note = f.querySelector('input').value.trim();
+    if (note.length < 5) return;
+    busy(rpc('verify_catch', { p_catch_id: f.getAttribute('data-id'), p_type: 'community', p_outcome: 'rejected', p_evidence_ref: null, p_note: note }).then(refreshReg), 'Record marked as rejected.');
+  }
+};
+document.addEventListener('click', function (e) { var el = e.target.closest('[data-act]'); if (!el) return; var a = ACT[el.getAttribute('data-act')]; if (a) { e.preventDefault(); a(el); } });
+document.addEventListener('submit', function (e) { var f = e.target.closest('form[data-form]'); if (!f) return; e.preventDefault(); FORMS[f.getAttribute('data-form')](f); });
+document.addEventListener('input', function (e) {
+  if (e.target.id === 'fisher-q') paintFisherResults();
+  if (e.target.closest('#lines')) paintTotal();
+});
+document.addEventListener('change', function (e) {
+  if (e.target.classList.contains('l-buyer')) $('.l-pricewrap', e.target.closest('.line')).className = 'l-pricewrap' + (e.target.value ? '' : ' hide');
+  if (e.target.getAttribute('data-change') === 'org') { S.org = e.target.value; DB.put('kv', S.org, ukey('org')).then(loadCache).then(function () { render(); if (navigator.onLine) refreshReg().then(render, function () {}); }); }
+  if (e.target.closest('#lines')) paintTotal();
+});
+window.addEventListener('online', function () { S.online = true; paintStatus(); sync(); });
+window.addEventListener('offline', function () { S.online = false; paintStatus(); });
+setInterval(function () { if (S.session && navigator.onLine && pendingCount() && !S.needLogin) sync(); }, 30000);
+
+// -------------------------------------------------------------------- boot
+function loadConfig() {
+  return fetch('config.json', { cache: 'no-cache' }).then(function (r) { return r.json(); }).then(function (c) { localStorage.setItem('ct.cfg', JSON.stringify(c)); return c; },
+    function () { var c = localStorage.getItem('ct.cfg'); if (c) return JSON.parse(c); throw new Error('config'); });
+}
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () { /* app still works online */ });
+loadConfig().then(function (c) {
+  S.cfg = c;
+  try { S.session = JSON.parse(localStorage.getItem('ct.session') || 'null'); } catch (e) { S.session = null; }
+  if (!S.session) return render();
+  return loadCache().then(function () {
+    render();
+    if (navigator.onLine) return refreshAll().then(function () { return loadCache(); }).then(function () { softRender(); return sync(); }, function (e) { if (e instanceof AuthErr) { S.needLogin = true; render(); } });
+  });
+}).catch(function () { $('#view').innerHTML = '<div class="msg err">The app could not start. Connect to the internet and open it again.</div>'; });
+window.__ct = { S: S, sync: sync };   // read-only handle used by the automated tests
+})();
+</script>
+</body>
+</html>
