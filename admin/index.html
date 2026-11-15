@@ -7,6 +7,8 @@
 <meta name="robots" content="noindex">
 <title>CatchTrace - Administration</title>
 <link rel="icon" href="../landing/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="leaflet/leaflet.css">
+<script src="leaflet/leaflet.js"></script>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -453,16 +455,19 @@ function loadPlaces() {
     loadOrgs(),
     get('landing_sites', 'select=id,name,county_id,bmu_organization_id,status,data_status,is_demo&order=name.asc'),
     get('gear_types', 'select=id,code,name,is_demo&order=name.asc'),
-    get('fishing_areas', 'select=id,code,name,county_id,area_type,data_status,is_demo&order=name.asc')
-  ]).then(function (r) { S.sites = r[1] || []; S.gear = r[2] || []; S.areas = r[3] || []; });
+    get('fishing_areas', 'select=id,code,name,county_id,area_type,data_status,is_demo&order=name.asc'),
+    rpc('landing_site_locations')
+  ]).then(function (r) {
+    S.sites = r[1] || []; S.gear = r[2] || []; S.areas = r[3] || []; S.locs = {};
+    (r[4] || []).forEach(function (x) { S.locs[x.landing_site_id] = x; });
+  });
 }
 function loadMembers(id) { return rpc('org_members', { p_org: id }).then(function (rows) { S.members[id] = rows || []; }); }
 function go(tab) {
-  S.tab = tab; S.open = null; S.adding = false; S.form = null; S.orgOpen = null; S.removing = null; S.flash = null;
+  S.tab = tab; S.open = null; S.adding = false; S.form = null; S.orgOpen = null; S.removing = null; S.flash = null; S.locOpen = null;
   if (tab === 'species') return render();
   S.loading = true; render();
   S.corrCatch = null; S.rejecting = null; S.approving = null;
-  if (tab === 'reports') { S.loading = false; return render(); }
   (tab === 'corr' ? loadCorr() : loadPlaces()).then(function () { S.loading = false; render(); }, function (e) { S.loading = false; fail(e, true); });
 }
 // Run a write, reload what it changed, redraw with a confirmation. After a
@@ -642,6 +647,39 @@ function section(id, title, addId, addText, form, formNode, rows, empty) {
     S.form === form ? formNode() : null,
     h('div', { 'class': 'list', style: 'margin-top:8px' }, rows.length ? rows : h('div', { 'class': 'muted', text: empty })));
 }
+function osmLink(l) { return 'https://www.openstreetmap.org/?mlat=' + l.lat + '&mlon=' + l.lon + '#map=15/' + l.lat + '/' + l.lon; }
+function siteItem(x) {
+  var l = (S.locs || {})[x.id], open = S.locOpen === x.id;
+  return h('div', { 'class': 'item', 'data-site': x.name }, h('strong', { text: x.name }), ' ', statusBadges(x),
+    h('div', { 'class': 'muted', text: countyName(x.county_id) + (x.bmu_organization_id ? ' - ' + orgName(x.bmu_organization_id) : '') }),
+    l ? h('div', { 'class': 'muted', 'data-loc': '1' }, 'Location ' + l.lat + ', ' + l.lon + (l.accuracy_m != null ? ' (within ' + Number(l.accuracy_m) + ' m)' : '') + ' - source: ' + l.source + ', ' + l.source_ref + ' - ',
+          h('a', { href: osmLink(l), target: '_blank', rel: 'noopener noreferrer', text: 'open map' }))
+      : h('div', { 'class': 'muted', 'data-loc': '0', text: 'No location recorded.' }),
+    isAdmin() && !open ? h('button', { 'class': 'sec small', 'data-act': 'loc', text: l ? 'Change location' : 'Add location',
+                                       onclick: function () { S.locOpen = x.id; S.form = null; S.flash = null; render(); } }) : null,
+    open ? h('form', { id: 'loc-form', onsubmit: function (ev) { doSetLocation(ev, x); } },
+      h('p', { 'class': 'muted', text: 'Only from a cited source: a GPS reading taken at the site, a survey, or an official list. Never estimated from a map. The earlier location, if any, is kept as history.' }),
+      h('div', { 'class': 'grid2' },
+        h('div', {}, field('Latitude, for example -4.6545', h('input', { id: 'loc-lat', inputmode: 'decimal', value: l ? String(l.lat) : '' }))),
+        h('div', {}, field('Longitude, for example 39.3810', h('input', { id: 'loc-lon', inputmode: 'decimal', value: l ? String(l.lon) : '' })))),
+      h('div', { 'class': 'grid2' },
+        h('div', {}, field('Source, for example GPS reading at the site', h('input', { id: 'loc-source', maxlength: '200' }))),
+        h('div', {}, field('Source reference, for example field sheet, date, who took it', h('input', { id: 'loc-ref', maxlength: '200' })))),
+      field('Accuracy in metres (optional)', h('input', { id: 'loc-acc', inputmode: 'decimal' })),
+      h('div', { 'class': 'actions' }, submitBtn('loc-save', 'Save location', 'Saving...'),
+        h('button', { type: 'button', 'class': 'sec', text: 'Cancel', onclick: function () { S.locOpen = null; S.flash = null; render(); } }))) : null);
+}
+function num(v) { v = String(v).trim().replace(',', '.'); return v === '' || isNaN(Number(v)) ? null : Number(v); }
+function doSetLocation(ev, site) {
+  ev.preventDefault();
+  var lat = num($('#loc-lat').value), lon = num($('#loc-lon').value), src = $('#loc-source').value.trim(), ref = $('#loc-ref').value.trim(), acc = $('#loc-acc').value.trim();
+  if (lat === null || lon === null) return setFlash('err', 'Enter the latitude and the longitude as numbers.');
+  if (lat < -5 || lat > -1 || lon < 38 || lon > 42) return setFlash('err', 'That point is not on the Kenyan coast. Latitude is between -5 and -1 (south), longitude between 38 and 42. Check they are not swapped.');
+  if (!src || !ref) return setFlash('err', 'Enter where the location comes from and a reference to it. A location without a source cannot be saved.');
+  if (acc && (num(acc) === null || num(acc) < 0)) return setFlash('err', 'Accuracy must be a number of metres, or left empty.');
+  act(function () { return rpc('set_landing_site_coordinates', { p_site: site.id, p_lat: lat, p_lon: lon, p_source: src, p_source_ref: ref, p_accuracy_m: acc ? num(acc) : null }); },
+      'Location saved for ' + site.name + '.', loadPlaces, function () { S.locOpen = null; });
+}
 function viewPlaces() {
   if (!S.sites) return [h('div', { 'class': 'card muted', text: 'Loading...' })];
   var bmus = [['', 'No BMU set']].concat(S.orgs.filter(function (o) { return o.org_type === 'bmu'; }).map(function (o) { return [o.id, o.name]; }));
@@ -653,12 +691,9 @@ function viewPlaces() {
           h('div', {}, field('Name of the landing site', h('input', { id: 'site-name', maxlength: '120' }))),
           h('div', {}, field('County', countyPick('site-county', false)))),
         field('Beach Management Unit responsible (optional)', pick('site-bmu', bmus, '')),
-        h('p', { 'class': 'muted', text: 'Saved as unverified until it is checked against the official register. Coordinates are not entered here.' }),
+        h('p', { 'class': 'muted', text: 'Saved as unverified until it is checked against the official register. Its location is added afterwards, from a cited source.' }),
         demoBox('site-demo'), formActions('site-save', 'Save landing site'));
-    }, S.sites.map(function (x) {
-      return h('div', { 'class': 'item', 'data-site': x.name }, h('strong', { text: x.name }), ' ', statusBadges(x),
-        h('div', { 'class': 'muted', text: countyName(x.county_id) + (x.bmu_organization_id ? ' - ' + orgName(x.bmu_organization_id) : '') }));
-    }), 'No landing sites yet.'),
+    }, S.sites.map(siteItem), 'No landing sites yet.'),
     section('gear', 'Gear types', 'btn-gear', 'Add a gear type', 'gear', function () {
       return h('form', { id: 'gear-form', onsubmit: doAddGear },
         h('div', { 'class': 'grid2' },
@@ -827,6 +862,7 @@ function reportTable(r) {
               ['officially_verified_kg', 'Officially verified kg', 1], ['unverified_kg', 'Not verified kg', 1], ['entered_supply_chain_kg', 'Sold on kg', 1]];
   var rows = r.rows || [], sum = function (k) { return Math.round(rows.reduce(function (a, x) { return a + Number(x[k] || 0); }, 0) * 1000) / 1000; };
   return h('div', { 'class': 'card', id: 'report' },
+    rows.length ? h('div', { 'class': 'actions', style: 'margin-top:0' }, h('button', { type: 'button', 'class': 'sec', id: 'rep-csv', text: 'Download as spreadsheet (CSV)', onclick: function () { reportCsv(r, cols); } })) : null,
     h('div', { 'class': 'msg info', id: 'rep-basis', text: r.basis + ' Covers ' + r.scope + ', ' + r.from + ' to ' + r.to + (r.includes_demo_data ? ', INCLUDING test and demonstration data.' : ', excluding test and demonstration data.') }),
     !rows.length ? h('div', { 'class': 'muted', id: 'rep-empty', text: 'No landings were recorded in this period.' })
     : [h('div', { id: 'rep-totals' }, h('strong', { text: sum('catch_records') + ' catch records, ' + sum('reported_kg') + ' kg reported' }),
@@ -835,6 +871,94 @@ function reportTable(r) {
        h('div', { 'class': 'scroll' }, h('table', {},
          h('thead', {}, h('tr', {}, cols.map(function (c) { return h('th', { 'class': c[2] ? 'n' : '', text: c[1] }); }))),
          h('tbody', {}, rows.map(function (x) { return h('tr', {}, cols.map(function (c) { return h('td', { 'class': c[2] ? 'n' : '', text: c[2] ? String(Number(x[c[0]])) : String(x[c[0]]) }); })); }))))]);
+}
+// A cell that starts with = + - @ could be run as a formula by a spreadsheet;
+// such cells are prefixed with an apostrophe. Numbers are left as numbers.
+function csvCell(v, isNum) {
+  if (v === null || v === undefined) return '';
+  if (isNum) return String(Number(v));
+  v = String(v);
+  if (/^[=+\-@\t\r]/.test(v)) v = "'" + v;
+  return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+}
+function downloadCsv(name, lines) {
+  var text = '﻿' + lines.map(function (l) { return l.join(','); }).join('\r\n') + '\r\n';
+  var url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+  var a = h('a', { href: url, download: name });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+}
+function reportCsv(r, cols) {
+  var lines = [[csvCell('CatchTrace - landings recorded, ' + r.from + ' to ' + r.to)],
+               [csvCell(r.basis + ' Covers ' + r.scope + '.' + (r.includes_demo_data ? ' INCLUDES test and demonstration data.' : ' Excludes test and demonstration data.'))],
+               [csvCell('Downloaded ' + new Date().toISOString())], [],
+               cols.map(function (c) { return csvCell(c[1]); })];
+  (r.rows || []).forEach(function (x) { lines.push(cols.map(function (c) { return csvCell(x[c[0]], c[2]); })); });
+  downloadCsv('catchtrace-landings-' + r.from + '-to-' + r.to + (r.includes_demo_data ? '-WITH-DEMO' : '') + '.csv', lines);
+}
+// ------------------------------------------------------------- map of sites
+// Landing sites that have a location from a cited source, sized by the weight
+// reported in the report period (when a report is shown). The background map
+// is OpenStreetMap; if it cannot load, the points and the table still show.
+function siteTotals() {
+  var t = {};
+  if (!S.report) return t;
+  (S.report.rows || []).forEach(function (x) {
+    var k = x.county + '|' + x.landing_site, o = t[k] || (t[k] = { kg: 0, records: 0 });
+    o.kg += Number(x.reported_kg || 0); o.records += Number(x.catch_records || 0);
+  });
+  return t;
+}
+function mapSites() {
+  var tot = siteTotals();
+  return (S.sites || []).map(function (s) {
+    var k = countyName(s.county_id) + '|' + s.name, t = tot[k] || { kg: 0, records: 0 };
+    return { site: s, loc: (S.locs || {})[s.id], kg: Math.round(t.kg * 1000) / 1000, records: t.records };
+  });
+}
+function viewMap() {
+  if (!S.sites) return h('div', { 'class': 'card muted', text: 'Loading the landing sites...' });
+  var all = mapSites(), on = all.filter(function (x) { return x.loc; }), off = all.filter(function (x) { return !x.loc; });
+  return h('div', { 'class': 'card', id: 'map-card' },
+    h('h3', { text: 'Map of landing sites' }),
+    h('p', { 'class': 'muted', text: S.report ? 'Circle size shows the weight reported at each site from ' + S.report.from + ' to ' + S.report.to + (S.report.includes_demo_data ? ', including demonstration data.' : '.')
+                                              : 'Show a report above to size each site by the weight landed there.' }),
+    on.length ? h('div', { id: 'map', style: 'height:360px;border-radius:8px;border:1px solid #d0dbe3' }) : null,
+    on.length ? h('div', { 'class': 'scroll', style: 'margin-top:8px' }, h('table', { id: 'map-table' },
+      h('thead', {}, h('tr', {}, ['Landing site', 'County', 'Latitude', 'Longitude', 'Source', 'Records', 'Reported kg'].map(function (c, i) { return h('th', { 'class': i > 1 && i !== 4 ? 'n' : '', text: c }); }))),
+      h('tbody', {}, on.map(function (x) {
+        return h('tr', { 'data-site': x.site.name }, h('td', { text: x.site.name }), h('td', { text: countyName(x.site.county_id) }), h('td', { 'class': 'n', text: String(x.loc.lat) }),
+          h('td', { 'class': 'n', text: String(x.loc.lon) }), h('td', { text: x.loc.source + ', ' + x.loc.source_ref }), h('td', { 'class': 'n', text: String(x.records) }), h('td', { 'class': 'n', text: String(x.kg) }));
+      })))) : h('div', { 'class': 'msg info', id: 'map-empty', text: 'No landing site has a location yet. Add one under Places and gear, from a cited source.' }),
+    off.length ? h('p', { 'class': 'muted', id: 'map-missing', text: 'Not on the map because no location has been recorded: ' + off.map(function (x) { return x.site.name; }).join(', ') + '.' }) : null,
+    on.length ? h('div', { 'class': 'actions' }, h('button', { type: 'button', 'class': 'sec', id: 'map-csv', text: 'Download site list (CSV)', onclick: function () {
+      var lines = [['Landing site', 'County', 'Latitude', 'Longitude', 'Accuracy m', 'Source', 'Source reference', 'Records', 'Reported kg'].map(function (c) { return csvCell(c); })];
+      all.forEach(function (x) { lines.push([csvCell(x.site.name), csvCell(countyName(x.site.county_id)), x.loc ? csvCell(x.loc.lat, 1) : '', x.loc ? csvCell(x.loc.lon, 1) : '',
+        x.loc && x.loc.accuracy_m != null ? csvCell(x.loc.accuracy_m, 1) : '', x.loc ? csvCell(x.loc.source) : 'no location recorded', x.loc ? csvCell(x.loc.source_ref) : '', csvCell(x.records, 1), csvCell(x.kg, 1)]); });
+      downloadCsv('catchtrace-landing-sites' + (S.report ? '-' + S.report.from + '-to-' + S.report.to : '') + '.csv', lines);
+    } })) : null);
+}
+function drawMap() {
+  var el = $('#map');
+  if (!el) return;
+  if (typeof L === 'undefined') { el.textContent = 'The map could not be loaded. The table below lists every located site.'; el.className = 'muted'; return; }
+  var pts = mapSites().filter(function (x) { return x.loc; });
+  var m = L.map(el, { scrollWheelZoom: false });
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, referrerPolicy: 'strict-origin-when-cross-origin',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(m);
+  var max = Math.max.apply(null, pts.map(function (x) { return x.kg; }).concat([1]));
+  var b = [];
+  pts.forEach(function (x) {
+    var r = x.kg > 0 ? 6 + 18 * Math.sqrt(x.kg / max) : 5;
+    var c = L.circleMarker([x.loc.lat, x.loc.lon], { radius: r, color: '#0b5d7a', weight: 2, fillColor: x.kg > 0 ? '#1a8fb8' : '#ffffff', fillOpacity: 0.7 }).addTo(m);
+    var pop = document.createElement('div');
+    pop.appendChild(h('strong', { text: x.site.name }));
+    pop.appendChild(h('div', { text: S.report ? x.records + ' catch records, ' + x.kg + ' kg reported' : countyName(x.site.county_id) }));
+    c.bindPopup(pop);
+    c.getElement && c.getElement() && c.getElement().setAttribute('data-site', x.site.name);
+    b.push([x.loc.lat, x.loc.lon]);
+  });
+  if (b.length === 1) m.setView(b[0], 12); else m.fitBounds(b, { padding: [30, 30], maxZoom: 13 });
 }
 function viewReports() {
   var t = today();
@@ -848,6 +972,7 @@ function viewReports() {
         h('label', { 'for': 'rep-demo', text: 'Include test and demonstration data' })),
       h('div', { 'class': 'actions' }, submitBtn('rep-go', 'Show report', 'Loading...'))),
     S.report ? reportTable(S.report) : null,
+    viewMap(),
     !isAdmin() ? null : h('div', { 'class': 'card', id: 'audit' },
       h('h3', { text: 'Audit log' }),
       h('p', { 'class': 'muted', text: 'Every change is written to a log in which each entry is sealed to the one before it. This check re-reads the whole log and confirms nothing has been altered or removed.' }),
@@ -864,6 +989,7 @@ function render() {
   add(v, tabsBar());
   if (S.tab !== 'species' && S.loading) { add(v, h('div', { 'class': 'card muted', text: 'Loading...' })); return; }
   add(v, S.tab === 'orgs' ? viewOrgs() : S.tab === 'places' ? viewPlaces() : S.tab === 'corr' ? viewCorr() : S.tab === 'reports' ? viewReports() : viewSpecies());
+  if (S.tab === 'reports') drawMap();
 }
 
 // ------------------------------------------------------------------ boot
@@ -873,7 +999,7 @@ fetch('config.json', { cache: 'no-cache' }).then(function (r) { return r.json();
   if (!S.session) return render();
   return loadAll();
 }).catch(function () { add($('#view'), h('div', { 'class': 'msg err', text: 'The page could not start. Check the connection and open it again.' })); });
-window.__cta = { S: S };   // read-only handle used by the automated tests
+window.__cta = { S: S, csvCell: csvCell };   // read-only handle used by the automated tests
 })();
 </script>
 </body>
