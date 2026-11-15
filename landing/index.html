@@ -266,11 +266,13 @@ function orgName() { var m = memberships().filter(function (x) { return x.organi
 function refreshAll() {
   return rpc('my_context').then(function (ctx) {
     S.ctx = ctx; pickOrg();
+    // On the live system, test and demonstration entries are never offered.
+    var live = S.cfg && S.cfg.env === 'production' ? '&is_demo=eq.false' : '';
     return Promise.all([
-      get('species', 'select=id,common_name_en,common_name_sw,category,is_demo&order=common_name_en.asc'),
-      get('gear_types', 'select=id,code,name&order=name.asc'),
-      get('landing_sites', 'select=id,name,county_id,status,is_demo&status=eq.active&order=name.asc'),
-      get('fishing_areas', 'select=id,code,name&order=name.asc'),
+      get('species', 'select=id,common_name_en,common_name_sw,category,is_demo' + live + '&order=common_name_en.asc'),
+      get('gear_types', 'select=id,code,name' + live + '&order=name.asc'),
+      get('landing_sites', 'select=id,name,county_id,status,is_demo&status=eq.active' + live + '&order=name.asc'),
+      get('fishing_areas', 'select=id,code,name' + live + '&order=name.asc'),
       get('organizations', 'select=id,name,org_type,status&status=eq.active&org_type=in.(buyer,processor,cooperative,bmu)&order=name.asc'),
       get('weight_units', 'select=code,name&order=code.asc')
     ]);
