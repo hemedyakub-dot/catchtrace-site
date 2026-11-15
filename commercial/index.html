@@ -579,7 +579,8 @@ function viewLogin() {
       field('Email', h('input', { id: 'email', type: 'email', autocomplete: 'username', value: S.login.email, required: true })),
       field('Password', h('input', { id: 'password', type: 'password', autocomplete: 'current-password', required: true })),
       h('div', { 'class': 'actions' }, loginBtn('login-go', 'Sign in', 'Signing in...')),
-      linkBtn('to-code', 'Sign in with a code sent by email', 'email'))];
+      // Sign-in by emailed code is switched on in config.json ("code_sign_in": true) once mail delivery is set up.
+      S.cfg && S.cfg.code_sign_in === true ? linkBtn('to-code', 'Sign in with a code sent by email', 'email') : null)];
 }
 function orgPicker() {
   if (S.orgs.length < 2) return null;

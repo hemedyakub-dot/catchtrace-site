@@ -555,7 +555,8 @@ function viewLogin() {
     '<label for="email">Email</label><input id="email" type="email" autocomplete="username" value="' + em + '" required>' +
     '<label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required>' +
     '<div style="height:12px"></div><button class="big" type="submit">Sign in</button>' +
-    '<div style="height:8px"></div><button type="button" class="big sec" data-act="loginmode" data-mode="email" id="to-code">Sign in with a code sent by email</button>' + note + '</form>';
+    // Sign-in by emailed code is switched on in config.json ("code_sign_in": true) once mail delivery is set up.
+    (S.cfg && S.cfg.code_sign_in === true ? '<div style="height:8px"></div><button type="button" class="big sec" data-act="loginmode" data-mode="email" id="to-code">Sign in with a code sent by email</button>' : '') + note + '</form>';
 }
 function viewTrips() {
   if (!S.org) return '<div class="msg info">This account is not yet a member of any organisation. Ask your BMU or cooperative administrator to add you.</div>';
