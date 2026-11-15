@@ -73,7 +73,11 @@ function tr(s) {
   var core = s.trim(), i;
   if (!core) return s;
   if (Object.prototype.hasOwnProperty.call(DICT, core)) return s.replace(core, DICT[core]);
-  for (i = 0; i < RULES.length; i++) if (RULES[i][0].test(core)) return s.replace(core, core.replace(RULES[i][0], RULES[i][1]));
+  // In a rule, $1 keeps a captured part as it is (a name, a date); $T1 translates it too.
+  for (i = 0; i < RULES.length; i++) if (RULES[i][0].test(core)) {
+    var m = core.match(RULES[i][0]);
+    return s.replace(core, RULES[i][1].replace(/\$(T?)(\d)/g, function (_, t, d) { var g = m[+d] || ''; return t ? tr(g) : g; }));
+  }
   var out = s;
   for (i = 0; i < LONG.length; i++) if (out.indexOf(LONG[i]) >= 0) out = out.split(LONG[i]).join(DICT[LONG[i]]);
   return out;
