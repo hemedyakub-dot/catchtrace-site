@@ -278,7 +278,7 @@ function loadOrg() {
   var q = isGroup() ? [
     get('honey_producers', 'select=id,producer_ref,producer_kind,full_name,community,county_id,member_no,show_name_publicly,status&' + o + '&order=full_name.asc'),
     get('honey_producer_contacts', 'select=producer_id,phone,village'),
-    get('honey_apiaries', 'select=id,apiary_ref,producer_id,name,habitat,habitat_note,community,status&' + o + '&order=name.asc'),
+    get('honey_apiaries', 'select=id,apiary_ref,producer_id,name,habitat,habitat_note,community,county_id,status&status=eq.active&' + o + '&order=name.asc'),
     get('honey_hives', 'select=id,hive_ref,apiary_id,producer_id,hive_type,label,status&' + o + '&order=label.asc'),
     get('honey_harvests', 'select=id,harvest_ref,producer_id,apiary_id,harvest_date,honey_class,class_note,quantity_kg,received_kg,method,observations,community_verified_at,document_verified_at,disputed_at,status,void_reason,created_by,weigh_stage,container_tare_kg,comb_gross_kg,pressed_gross_kg,pressed_at,settled_gross_kg,settled_at,scum_kg&' + o + '&order=harvest_date.desc,harvest_ref.desc'),
     get('honey_apiary_locations', 'select=apiary_id,accuracy_m,source,created_at&is_current=eq.true'),
@@ -437,6 +437,26 @@ function doCorrect(ev, hv) {
     return hv.harvest_ref + ' corrected: ' + kg(r.previous_kg) + ' -> ' + kg(r.quantity_kg) + (r.final ? '' : ' (provisional)') + '.' + (r.verification_cleared ? ' The earlier verification no longer counts - the verifier must check it again.' : '');
   }, function () { S.form = null; }, true);
 }
+function doAddApiary(ev) {
+  ev.preventDefault();
+  var p = { p_org: S.org, p_name: val('ap-name'), p_habitat: val('ap-habitat'), p_habitat_note: val('ap-note') || null, p_community: val('ap-community'), p_county_code: val('ap-county') };
+  if (!need(p.p_name.length >= 2, 'Name the apiary.') || !need(p.p_community.length >= 2, 'Enter the community.') || !need(p.p_habitat !== 'other' || p.p_habitat_note, 'Describe the habitat.')) return;
+  p.p_client_id = cid('apiary', p);
+  act(function () { return rpc('add_honey_apiary', p); }, function (r) { return 'Apiary ' + r.name + ' (' + r.apiary_ref + ') registered. Add the beekeepers\' hives to it.'; }, function () { S.form = null; });
+}
+function doEditApiary(ev, a) {
+  ev.preventDefault();
+  var p = { p_apiary_id: a.id, p_name: val('ae-name'), p_habitat: val('ae-habitat'), p_habitat_note: val('ae-note') || null, p_community: val('ae-community'), p_county_code: val('ae-county') };
+  if (!need(p.p_name.length >= 2, 'Name the apiary.') || !need(p.p_habitat !== 'other' || p.p_habitat_note, 'Describe the habitat.')) return;
+  act(function () { return rpc('update_honey_apiary', p); }, a.apiary_ref + ' updated.', function () { S.form = null; }, true);
+}
+function doMerge(ev, a) {
+  ev.preventDefault();
+  var ids = Array.prototype.filter.call(document.querySelectorAll('.mg-pick'), function (c) { return c.checked; }).map(function (c) { return c.value; });
+  if (!need(ids.length, 'Tick the duplicate apiaries to merge into ' + a.name + '.') || !need(val('mg-reason').length >= 5, 'Say why they are merged.')) return;
+  act(function () { return rpc('merge_honey_apiaries', { p_keep_id: a.id, p_merge_ids: ids, p_reason: val('mg-reason') }); },
+    function (r) { return r.merged + ' merged into ' + a.name + ': ' + r.hives_moved + ' hives and ' + r.harvests_moved + ' harvests moved. The old records stay on file as merged.'; }, function () { S.form = null; }, true);
+}
 function doApiary(ev, prod) {
   ev.preventDefault();
   var p = { p_producer_id: prod.id, p_name: val('ap-name'), p_habitat: val('ap-habitat'), p_habitat_note: val('ap-note') || null,
@@ -447,8 +467,8 @@ function doApiary(ev, prod) {
 }
 function doHive(ev, ap) {
   ev.preventDefault();
-  var p = { p_apiary_id: ap.id, p_hive_type: val('hv-type'), p_label: val('hv-label'), p_producer_id: null };
-  if (!need(p.p_label.length >= 1, 'Give the hive its label as painted on it.')) return;
+  var p = { p_apiary_id: ap.id, p_hive_type: val('hv-type'), p_label: val('hv-label'), p_producer_id: val('hv-prod') || null };
+  if (!need(p.p_producer_id || ap.producer_id, 'Choose whose hive it is.') || !need(p.p_label.length >= 1, 'Give the hive its label as painted on it.')) return;
   p.p_client_id = cid('hive', p);
   act(function () { return rpc('register_honey_hive', p); }, function (r) { return 'Hive ' + r.hive_ref + ' registered.'; }, function () { S.form = null; });
 }
@@ -476,7 +496,9 @@ function doHarvest(ev) {
   if (staged) {
     if (!need(tare >= 0, 'Enter the container weight in kg.') || !need(comb > tare, 'Enter the weight of the combs with the container - it must be more than the container.') || !need(scum >= 0, 'Enter the scum deduction (usually 0.5 kg).')) return;
   } else if (!need(kgv > 0, 'Enter the final net weight in kg.')) return;
-  var p = { p_apiary_id: ap.id, p_producer_id: ap.producer_id, p_hive_ids: hives.length ? hives : null, p_harvest_date: val('hh-date'),
+  var prodId = val('hh-prod') || ap.producer_id;
+  if (!need(prodId, 'Choose the beekeeper.')) return;
+  var p = { p_apiary_id: ap.id, p_producer_id: prodId, p_hive_ids: hives.length ? hives : null, p_harvest_date: val('hh-date'),
             p_honey_class: val('hh-class'), p_class_note: val('hh-classnote') || null, p_quantity_kg: staged ? null : kgv, p_method: val('hh-method'),
             p_observations: val('hh-obs') || null, p_location_note: val('hh-loc') || null,
             p_comb_gross_kg: staged ? comb : null, p_container_tare_kg: staged ? tare : null, p_scum_kg: staged ? scum : 0.5 };
@@ -688,7 +710,7 @@ function verifBadges(x) {
           !x.community_verified_at && !x.document_verified_at && !x.disputed_at ? h('span', { 'class': 'badge wait', text: 'Not yet verified' }) : null];
 }
 function tabs() {
-  var list = isGroup() ? [['producers', 'Beekeepers'], ['harvests', 'Harvests'], ['dash', 'Dashboard']]
+  var list = isGroup() ? [['producers', 'Beekeepers'], ['apiaries', 'Apiaries'], ['harvests', 'Harvests'], ['dash', 'Dashboard']]
                        : [['intake', 'Intake'], ['batches', 'Batches'], ['stock', 'Stock'], ['dash', 'Dashboard']];
   return h('div', { 'class': 'tabs' }, list.map(function (t) { return h('button', { id: 'tab-' + t[0], 'class': S.tab === t[0] ? 'on' : '', text: t[1], onclick: function () { go(t[0]); } }); }));
 }
@@ -713,7 +735,7 @@ function viewProducers() {
     h('div', { 'class': 'actions' }, btn('btn-producer', 'Register', 'Saving...', '', null, 'submit'), cancel())));
   if (!D.producers.length) out.push(h('div', { 'class': 'card muted', text: 'No beekeepers registered yet.' }));
   D.producers.forEach(function (p) {
-    var c = D.contacts[p.id] || {}, aps = D.apiaries.filter(function (a) { return a.producer_id === p.id; });
+    var c = D.contacts[p.id] || {};
     var card = h('div', { 'class': 'card producer', 'data-ref': p.producer_ref },
       h('div', { 'class': 'name', text: p.full_name }), h('span', { 'class': 'ref', text: p.producer_ref + ' ' }),
       h('span', { 'class': 'badge', text: p.producer_kind === 'group' ? 'Group' : 'Beekeeper' }),
@@ -731,30 +753,62 @@ function viewProducers() {
         isAdmin() ? field('Status (group administrator)', sel('pe-status', PSTATUS, p.status)) : null,
         h('p', { 'class': 'muted', text: 'The reference ' + p.producer_ref + ' stays the same. Every change is kept in the audit log.' }),
         h('div', { 'class': 'actions' }, btn('btn-pedit', 'Save changes', 'Saving...', '', null, 'submit'), cancel())) : null);
-    aps.forEach(function (a) {
-      var hv = D.hives.filter(function (x) { return x.apiary_id === a.id; }), loc = D.locs[a.id];
-      add(card, h('div', { 'class': 'sub apiary', 'data-ref': a.apiary_ref },
-        h('div', {}, h('strong', { text: a.name + ' ' }), h('span', { 'class': 'ref', text: a.apiary_ref + ' ' }), h('span', { 'class': 'badge ' + (a.habitat === 'mangrove' ? 'ok' : ''), text: label(HABITATS, a.habitat) })),
-        h('div', { 'class': 'muted', text: (a.habitat_note ? a.habitat_note + ' - ' : '') + (loc ? 'Position on file (private, about ' + (loc.accuracy_m || '?') + ' m)' : 'No position on file') }),
-        h('div', { 'class': 'muted', text: hv.length ? 'Hives: ' + hv.map(function (x) { return x.label + ' (' + x.hive_ref + ')'; }).join(', ') : 'No hives yet' }),
-        canWrite() ? h('div', { 'class': 'actions' }, toggle('hive-' + a.id, 'Add hive'), toggle('loc-' + a.id, loc ? 'Update position' : 'Add position')) : null,
-        S.form === 'hive-' + a.id ? h('form', { id: 'form-hive', onsubmit: function (e) { doHive(e, a); } },
-          h('div', { 'class': 'grid2' }, h('div', {}, field('Hive type', sel('hv-type', HIVE_TYPES, 'kenya_top_bar'))), h('div', {}, field('Label on the hive', input('hv-label')))),
-          h('div', { 'class': 'actions' }, btn('btn-hive', 'Add hive', 'Saving...', '', null, 'submit'), cancel())) : null,
-        S.form === 'loc-' + a.id ? h('form', { id: 'form-loc', onsubmit: function (e) { doLocation(e, a); } },
-          h('p', { 'class': 'muted', text: 'The exact position is private to your organisation. It is never on the public page or shared with buyers.' }),
-          h('button', { type: 'button', 'class': 'sec', id: 'btn-gps', text: 'Use this phone\'s position', onclick: useGps }),
-          h('div', { 'class': 'grid2' }, h('div', {}, field('Latitude', input('loc-lat', { inputmode: 'decimal' }))), h('div', {}, field('Longitude', input('loc-lon', { inputmode: 'decimal' })))),
-          h('div', { 'class': 'grid2' }, h('div', {}, field('Accuracy, metres', input('loc-acc', { inputmode: 'numeric' }))), h('div', {}, field('Source', sel('loc-src', [['gps', 'Phone GPS'], ['map', 'Map'], ['survey', 'Survey']], 'gps')))),
-          h('div', { 'class': 'actions' }, btn('btn-loc', 'Save position', 'Saving...', '', null, 'submit'), cancel())) : null));
-    });
-    if (canWrite()) add(card, h('div', { 'class': 'actions' }, toggle('apiary-' + p.id, 'Add apiary')));
-    if (S.form === 'apiary-' + p.id) add(card, h('form', { id: 'form-apiary', onsubmit: function (e) { doApiary(e, p); } },
-      field('Apiary name', input('ap-name', { placeholder: 'For example: Creek-side apiary' })),
-      h('div', { 'class': 'grid2' }, h('div', {}, field('Habitat', sel('ap-habitat', HABITATS, 'mangrove'))), h('div', {}, field('County', sel('ap-county', COUNTIES, '002')))),
-      field('Habitat note (required for "Other")', input('ap-note')), field('Community', input('ap-community', { value: p.community })),
-      h('div', { 'class': 'actions' }, btn('btn-apiary', 'Register apiary', 'Saving...', '', null, 'submit'), cancel())));
+    var mine = D.hives.filter(function (x) { return x.producer_id === p.id && x.status === 'active'; });
+    add(card, h('div', { 'class': 'muted hives-of', text: mine.length ? 'Hives: ' + mine.map(function (x) { var a = apiaryById(x.apiary_id); return x.label + (a ? ' (' + a.name + ')' : ''); }).join(', ')
+      : 'No hives yet - add them in Apiaries' }));
     out.push(card);
+  });
+  return out;
+}
+function apiaryById(id) { return (S.d.apiaries || []).filter(function (a) { return a.id === id; })[0]; }
+function producerById(id) { return (S.d.producers || []).filter(function (p) { return p.id === id; })[0]; }
+function activeProducers() { return (S.d.producers || []).filter(function (p) { return p.status === 'active'; }); }
+// ---- apiaries: sites of the group, registered once, chosen from a list
+function viewApiaries() {
+  var D = S.d, out = [h('div', { 'class': 'row' }, h('h2', { text: 'Apiaries' }), canWrite() ? toggle('apiary', 'Add a new apiary') : null), flash()];
+  if (S.form === 'apiary') out.push(h('form', { 'class': 'card', id: 'form-apiary', onsubmit: doAddApiary },
+    h('p', { 'class': 'muted', text: 'Only for a new site. Apiaries already listed below are chosen from the list when adding hives or recording harvests.' }),
+    field('Apiary name', input('ap-name', { placeholder: 'For example: Mwinjeni Apiary 003', autocomplete: 'off' })),
+    h('div', { 'class': 'grid2' }, h('div', {}, field('Habitat', sel('ap-habitat', HABITATS, 'mangrove'))), h('div', {}, field('County', sel('ap-county', COUNTIES, '002')))),
+    field('Habitat note (required for "Other")', input('ap-note')), field('Community', input('ap-community', { value: (D.apiaries[0] && D.apiaries[0].community) || '' })),
+    h('div', { 'class': 'actions' }, btn('btn-apiary', 'Register apiary', 'Saving...', '', null, 'submit'), cancel())));
+  if (!D.apiaries.length) out.push(h('div', { 'class': 'card muted', text: 'No apiaries registered yet.' }));
+  D.apiaries.forEach(function (a) {
+    var hv = D.hives.filter(function (x) { return x.apiary_id === a.id; }), loc = D.locs[a.id], owner = a.producer_id ? producerById(a.producer_id) : null;
+    var byP = {}; hv.forEach(function (x) { (byP[x.producer_id] = byP[x.producer_id] || []).push(x); });
+    var others = D.apiaries.filter(function (b) { return b.id !== a.id; });
+    out.push(h('div', { 'class': 'card apiary', 'data-ref': a.apiary_ref },
+      h('div', {}, h('span', { 'class': 'name', text: a.name + ' ' }), h('span', { 'class': 'ref', text: a.apiary_ref + ' ' }), h('span', { 'class': 'badge ' + (a.habitat === 'mangrove' ? 'ok' : ''), text: label(HABITATS, a.habitat) })),
+      h('div', { 'class': 'muted', text: a.community + (a.habitat_note ? ' - ' + a.habitat_note : '') + ' - ' + (loc ? 'position on file (private, about ' + (loc.accuracy_m || '?') + ' m)' : 'no position on file') }),
+      owner ? h('div', { 'class': 'muted', text: 'Registered under ' + owner.full_name + ' (the old way). If it is the same site as another apiary, the group administrator can merge them.' }) : null,
+      h('div', { 'class': 'sub' }, hv.length ? Object.keys(byP).map(function (pid) { var p = producerById(pid); return h('div', { text: (p ? p.full_name : 'Beekeeper') + ': ' + byP[pid].map(function (x) { return x.label || x.hive_ref; }).join(', ') }); })
+        : h('div', { 'class': 'muted', text: 'No hives yet' })),
+      canWrite() ? h('div', { 'class': 'actions' }, toggle('hive-' + a.id, 'Add hive'), toggle('loc-' + a.id, loc ? 'Update position' : 'Add position'), toggle('aedit-' + a.id, 'Edit'),
+        isAdmin() && others.length ? toggle('merge-' + a.id, 'Merge duplicates into this') : null) : null,
+      S.form === 'hive-' + a.id ? h('form', { id: 'form-hive', onsubmit: function (e) { doHive(e, a); } },
+        field('Whose hive?', sel('hv-prod', [['', 'Choose the beekeeper']].concat(activeProducers().map(function (p) { return [p.id, p.full_name]; })), a.producer_id || '')),
+        h('div', { 'class': 'grid2' }, h('div', {}, field('Hive type', sel('hv-type', HIVE_TYPES, 'langstroth'))), h('div', {}, field('Label on the hive', input('hv-label')))),
+        h('div', { 'class': 'actions' }, btn('btn-hive', 'Add hive', 'Saving...', '', null, 'submit'), cancel())) : null,
+      S.form === 'loc-' + a.id ? h('form', { id: 'form-loc', onsubmit: function (e) { doLocation(e, a); } },
+        h('p', { 'class': 'muted', text: 'The exact position is private to your organisation. It is never on the public page or shared with buyers.' }),
+        h('button', { type: 'button', 'class': 'sec', id: 'btn-gps', text: 'Use this phone\'s position', onclick: useGps }),
+        h('div', { 'class': 'grid2' }, h('div', {}, field('Latitude', input('loc-lat', { inputmode: 'decimal' }))), h('div', {}, field('Longitude', input('loc-lon', { inputmode: 'decimal' })))),
+        h('div', { 'class': 'grid2' }, h('div', {}, field('Accuracy, metres', input('loc-acc', { inputmode: 'numeric' }))), h('div', {}, field('Source', sel('loc-src', [['gps', 'Phone GPS'], ['map', 'Map'], ['survey', 'Survey']], 'gps')))),
+        h('div', { 'class': 'actions' }, btn('btn-loc', 'Save position', 'Saving...', '', null, 'submit'), cancel())) : null,
+      S.form === 'aedit-' + a.id ? h('form', { id: 'form-aedit', onsubmit: function (e) { doEditApiary(e, a); } },
+        field('Apiary name', input('ae-name', { value: a.name })),
+        h('div', { 'class': 'grid2' }, h('div', {}, field('Habitat', sel('ae-habitat', HABITATS, a.habitat))), h('div', {}, field('County', sel('ae-county', COUNTIES, D.countyCode[a.county_id] || '002')))),
+        field('Habitat note', input('ae-note', { value: a.habitat_note || '' })), field('Community', input('ae-community', { value: a.community })),
+        h('div', { 'class': 'actions' }, btn('btn-aedit', 'Save changes', 'Saving...', '', null, 'submit'), cancel())) : null,
+      S.form === 'merge-' + a.id ? h('form', { id: 'form-merge', onsubmit: function (e) { doMerge(e, a); } },
+        h('p', { 'class': 'muted', text: 'Tick the records that are really this same apiary. Their hives and harvests move here; the old records stay on file, marked as merged.' }),
+        others.map(function (b) {
+          var n = D.hives.filter(function (x) { return x.apiary_id === b.id; }).length, o = b.producer_id ? producerById(b.producer_id) : null;
+          return h('div', { 'class': 'pickrow' }, h('input', { type: 'checkbox', 'class': 'mg-pick', id: 'mg-' + b.id, value: b.id }),
+            h('label', { 'for': 'mg-' + b.id, style: 'margin:4px 0', text: b.name + ' ' + b.apiary_ref + (o ? ' - ' + o.full_name : '') + ' - ' + n + (n === 1 ? ' hive' : ' hives') + ' - ' + label(HABITATS, b.habitat) }));
+        }),
+        field('Why are they merged?', input('mg-reason', { placeholder: 'For example: same site, entered once per beekeeper' })),
+        h('div', { 'class': 'actions' }, btn('btn-merge', 'Merge into ' + a.name, 'Saving...', '', null, 'submit'), cancel())) : null));
   });
   return out;
 }
@@ -796,20 +850,25 @@ function correctForm(x) {
 }
 function sameHives(x) {
   var hv = []; (S.d.harvestHives || []).forEach(function (l) { if (l.harvest_id === x.id) hv.push(l.hive_id); });
-  S.hhApiary = x.apiary_id; S.hhPrefill = { hives: hv, cls: x.honey_class === 'mangrove' ? 'terrestrial' : 'mangrove' }; S.form = 'harvest'; S.flash = null; render();
+  S.hhApiary = x.apiary_id; S.hhProd = x.producer_id; S.hhPrefill = { hives: hv, cls: x.honey_class === 'mangrove' ? 'terrestrial' : 'mangrove' }; S.form = 'harvest'; S.flash = null; render();
   var f = $('#form-harvest'); if (f && f.scrollIntoView) f.scrollIntoView();
 }
 function viewHarvests() {
   var D = S.d, out = [h('div', { 'class': 'row' }, h('h2', { text: 'Harvests' }), canWrite() && D.apiaries.length ? toggle('harvest', 'Record a harvest') : null), flash()];
   if (S.form === 'harvest') {
-    var apOpts = D.apiaries.map(function (a) { var p = D.producers.filter(function (x) { return x.id === a.producer_id; })[0]; return [a.id, a.name + ' - ' + (p ? p.full_name : '') + ' (' + label(HABITATS, a.habitat) + ')']; });
+    var apOpts = D.apiaries.map(function (a) { return [a.id, a.name + ' (' + label(HABITATS, a.habitat) + ')']; });
     var cur = S.hhApiary || (apOpts[0] && apOpts[0][0]), curAp = D.apiaries.filter(function (a) { return a.id === cur; })[0] || {};
-    var hives = D.hives.filter(function (x) { return x.apiary_id === cur; });
+    var inAp = D.hives.filter(function (x) { return x.apiary_id === cur && x.status === 'active'; });
+    var withHives = activeProducers().filter(function (p) { return inAp.some(function (x) { return x.producer_id === p.id; }); });
+    var prodOpts = withHives.concat(activeProducers().filter(function (p) { return withHives.indexOf(p) < 0; })).map(function (p) { return [p.id, p.full_name]; });
+    var curProd = S.hhProd && prodOpts.some(function (o) { return o[0] === S.hhProd; }) ? S.hhProd : (curAp.producer_id || (prodOpts[0] && prodOpts[0][0]));
+    var hives = inAp.filter(function (x) { return x.producer_id === curProd; });
     out.push(h('form', { 'class': 'card', id: 'form-harvest', onsubmit: doHarvest },
-      field('Apiary', sel('hh-apiary', apOpts, cur, function (e) { S.hhApiary = e.target.value; render(); })),
+      field('Apiary', sel('hh-apiary', apOpts, cur, function (e) { S.hhApiary = e.target.value; S.hhProd = null; render(); })),
+      field('Beekeeper', sel('hh-prod', prodOpts, curProd, function (e) { S.hhProd = e.target.value; render(); })),
       hives.length ? h('div', {}, h('label', { text: 'Hives harvested' }), hives.map(function (x) {
         return h('div', { 'class': 'pickrow' }, h('input', { type: 'checkbox', 'class': 'hh-hive', id: 'hh-' + x.id, value: x.id, checked: !!(S.hhPrefill && S.hhPrefill.hives.indexOf(x.id) >= 0) }), h('label', { 'for': 'hh-' + x.id, style: 'margin:4px 0', text: x.label + ' (' + x.hive_ref + ')' }));
-      })) : h('div', { 'class': 'muted', text: 'This apiary has no hives registered.' }),
+      })) : h('div', { 'class': 'muted', text: 'This beekeeper has no hives registered in this apiary (add them in Apiaries).' }),
       field('Harvest date', input('hh-date', { type: 'date', value: today(), max: today() })),
       field('Honey type', sel('hh-class', CLASSES, S.hhPrefill ? S.hhPrefill.cls : curAp.habitat === 'terrestrial_woodland' ? 'terrestrial' : curAp.habitat === 'other' ? 'other' : curAp.habitat === 'unknown' ? 'unknown' : 'mangrove')),
       h('p', { 'class': 'muted', text: 'Mangrove honey comes from a mangrove or mixed apiary, terrestrial from a woodland or mixed apiary. If the same hives gave both, record each honey type as its own harvest, each in its own container.' }),
@@ -1099,6 +1158,7 @@ function viewDash() {
 }
 function hero(kind, title, sub, tall) { return h('div', { 'class': 'hero ' + kind + (tall ? ' tall' : ''), role: 'img', 'aria-label': 'Honey bees' }, h('div', { 'class': 'ht', text: title }), sub ? h('div', { 'class': 'hs', text: sub }) : null); }
 var HEROES = { producers: ['flying', 'Beekeepers', 'Your group\'s beekeepers, apiaries and hives'],
+               apiaries: ['flying', 'Apiaries', 'Each site is registered once - beekeepers\' hives are added to it'],
                harvests: ['flower', 'Harvests', 'Weighed as combs, after pressing and after settling'],
                intake: ['flower', 'Intake', 'Honey received from the beekeepers\' groups'],
                dash: ['flying', 'Dashboard', 'Recorded honey, by community, honey type and season'] };
@@ -1116,7 +1176,7 @@ function render() {
   if (S.loading) { add(v, h('div', { 'class': 'card muted', text: 'Loading...' })); return; }
   var t = S.tab;
   if (!S.open && HEROES[t]) add(v, hero.apply(null, HEROES[t]));
-  add(v, S.open ? viewBatch() : t === 'producers' ? viewProducers() : t === 'harvests' ? viewHarvests() : t === 'intake' ? viewIntake()
+  add(v, S.open ? viewBatch() : t === 'producers' ? viewProducers() : t === 'apiaries' ? viewApiaries() : t === 'harvests' ? viewHarvests() : t === 'intake' ? viewIntake()
        : t === 'batches' ? viewBatches() : t === 'stock' ? viewStock() : viewDash());
 }
 // sign-in: password, or a code sent by email (shown when config.json has "code_sign_in": true) - same as the buying page
