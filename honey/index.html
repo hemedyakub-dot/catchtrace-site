@@ -250,7 +250,12 @@ function loadBase() {
     var seen = {};
     S.orgs = (ctx.memberships || []).filter(function (m) {
       if (['clerk', 'org_admin', 'verifier'].indexOf(m.role) < 0 || seen[m.organization_id] || m.active === false) return false;
+      // the platform operator, authorities and research bodies neither keep bees nor receive honey
+      if (['platform_operator', 'fisheries_authority', 'research'].indexOf(m.org_type) >= 0) return false;
       seen[m.organization_id] = true; return true;
+    }).sort(function (a, b) {   // beekeepers' groups first
+      var ga = a.org_type === 'producer_group' || a.org_type === 'cooperative', gb = b.org_type === 'producer_group' || b.org_type === 'cooperative';
+      return ga === gb ? String(a.organization).localeCompare(b.organization) : (ga ? -1 : 1);
     });
     var saved = localStorage.getItem('ct.honey.org');
     var pick = S.orgs.filter(function (m) { return m.organization_id === saved; })[0] || S.orgs[0];
@@ -936,7 +941,7 @@ function render() {
   add(u, h('button', { id: 'btn-signout', text: 'Sign out', onclick: doSignOut }));
   var m = me(); $('#hdr-sub').textContent = m ? m.organization : 'Honey traceability';
   if (S.loading && !S.ctx) { add(v, h('div', { 'class': 'card muted', text: 'Loading...' })); return; }
-  if (!S.org) { add(v, [flash(), h('div', { 'class': 'msg info', id: 'no-role', text: 'This account is not a member of a beekeepers\' group or a honey buyer, so there is nothing to record here.' })]); return; }
+  if (!S.org) { add(v, [flash(), h('div', { 'class': 'msg info', id: 'no-role', text: 'This account is not yet a member of a beekeepers\' group or a honey buyer. In Administration, open the group (or the buyer) and give this account a role under People - then open this page again.' })]); return; }
   add(v, [orgPicker(), S.open ? null : tabs()]);
   if (S.loading) { add(v, h('div', { 'class': 'card muted', text: 'Loading...' })); return; }
   var t = S.tab;
