@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#5a3d07">
+<meta name="robots" content="noindex">
+<title>HoneyTrace - MombasaFish CatchTrace</title>
+<link rel="icon" href="../landing/icon.svg" type="image/svg+xml">
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:#f3f5f7;color:#16212b;padding-bottom:40px}
+header{background:#5a3d07;color:#fff;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;position:sticky;top:0;z-index:5}
+header .t{font-weight:700;font-size:17px}
+header .o{font-size:12px;opacity:.85}
+header button{background:transparent;border:1px solid #fff;color:#fff;min-height:36px;padding:6px 10px;font-size:13px}
+main{padding:12px;max-width:760px;margin:0 auto}
+h2{font-size:18px;margin:6px 0 10px}
+h3{font-size:15px;margin:14px 0 6px}
+.card{background:#fff;border:1px solid #d7dde3;border-radius:8px;padding:12px;margin:0 0 10px}
+.row{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.muted{color:#5b6875;font-size:13px}
+.name{font-weight:700;font-size:16px;overflow-wrap:anywhere}
+.ref{font-family:ui-monospace,Consolas,monospace;font-size:13px}
+.big-num{font-size:20px;font-weight:700}
+label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px}
+input,select,textarea{width:100%;font:inherit;padding:11px 10px;border:1px solid #9aa7b3;border-radius:6px;background:#fff;color:inherit;min-height:46px}
+input[type=checkbox]{width:24px;height:24px;min-height:0;padding:0;flex:none}
+input:focus,select:focus,textarea:focus{outline:2px solid #9a6a08;outline-offset:0}
+button{font:inherit;font-weight:700;border:0;border-radius:6px;padding:12px 14px;min-height:46px;background:#9a6a08;color:#fff;cursor:pointer}
+button.big{width:100%;font-size:17px;padding:14px}
+button.sec{background:#fff;color:#5a3d07;border:1px solid #5a3d07}
+button.danger{background:#fff;color:#a32626;border:1px solid #a32626}
+button.small{min-height:38px;padding:8px 10px;font-size:14px}
+button:disabled{opacity:.5;cursor:default}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media (max-width:520px){.grid2{grid-template-columns:1fr}}
+.badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px;background:#e3e8ed;color:#33414d;vertical-align:middle;margin-right:4px}
+.badge.wait{background:#fff0cc;color:#6b4a00}
+.badge.ok{background:#d6f0e0;color:#14532d}
+.msg{padding:10px 12px;border-radius:6px;margin:0 0 10px;font-size:14px}
+.msg.err{background:#fbdada;color:#7c1515}
+.msg.info{background:#e3eef8;color:#5a3d07}
+.msg.ok{background:#d6f0e0;color:#14532d}
+.tabs{display:flex;gap:8px;margin:0 0 12px}
+.tabs button{flex:1;background:#fff;color:#33414d;border:1px solid #c5ced6}
+.tabs button.on{background:#5a3d07;color:#fff;border-color:#5a3d07}
+.actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.actions button{flex:1}
+.pickrow{display:flex;gap:10px;align-items:center}
+.list div.item{border-top:1px solid #e6eaee;padding:8px 0;font-size:14px;overflow-wrap:anywhere}
+.list div.item:first-child{border-top:0}
+.qrbox{border:1px solid #c5ced6;border-radius:8px;padding:12px;margin:10px 0;background:#fff;text-align:center}
+.qrbox svg{width:200px;height:200px;display:block;margin:0 auto 8px}
+.qrbox .lbl-name{font-weight:700;font-size:16px}
+.qrbox .lbl-url{font-size:11px;overflow-wrap:anywhere;color:#5b6875}
+.hide{display:none}
+@media print{
+  body *{visibility:hidden}
+  .qrbox.printing,.qrbox.printing *{visibility:visible}
+  .qrbox.printing{position:absolute;left:0;top:0;width:70mm;border:0}
+  .qrbox.printing .noprint{display:none}
+}
+.sub{border-top:1px solid #e6eaee;margin-top:10px;padding-top:8px}
+.badge.bad{background:#fbdada;color:#7c1515}
+.bar{display:grid;grid-template-columns:minmax(120px,40%) 1fr auto;gap:8px;align-items:center;font-size:14px;margin:4px 0}
+.bar-t{background:#e3e8ed;border-radius:4px;height:14px}.bar-f{background:#c98a0b;height:14px;border-radius:4px}
+.labels{display:flex;flex-wrap:wrap;gap:8px}
+.qrlabel{border:1px dashed #9aa7b3;border-radius:6px;padding:6px;width:46mm;text-align:center;font-size:11px;background:#fff}
+.qrlabel svg{width:34mm;height:34mm;display:block;margin:0 auto}
+.qrlabel .lbl-name{font-weight:700;font-size:12px}.qrlabel .lbl-small{font-size:9px;color:#33414d}
+@media print{body.print-labels *{visibility:hidden}body.print-labels #labels,body.print-labels #labels *{visibility:visible}
+  body.print-labels #labels{position:absolute;left:0;top:0}body.print-labels .qrlabel{break-inside:avoid;border-color:#ccc}}
+</style>
+</head>
+<body>
+<header>
+  <div><div class="t" id="hdr-title">HoneyTrace</div><div class="o" id="hdr-sub">Honey traceability</div></div>
+  <div id="hdr-user"></div>
+</header>
+<main id="view"></main>
+<script src="../commercial/qrcode.js"></script>
+<script>
+(function () {
+'use strict';
+var SESSION_KEY = 'ct.admin.session';   // shares the office sign-in with administration and buying
+// Generated by tools/build_honey_page.py - edit tools/honey_page_body.js, not this file.
+// ------------------------------------------------------------------- dom
+// Everything shown comes through text nodes; no markup is built from data.
+function h(tag, attrs) {
+  var e = document.createElement(tag), k, i;
+  for (k in (attrs || {})) {
+    var v = attrs[k];
+    if (v === null || v === undefined || v === false) continue;
+    if (k === 'text') e.textContent = v;
+    else if (k === 'class') e.className = v;
+    else if (k === 'value') e.value = v;
+    else if (k === 'checked') e.checked = !!v;
+    else if (k.slice(0, 2) === 'on') e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v === true ? '' : v);
+  }
+  for (i = 2; i < arguments.length; i++) add(e, arguments[i]);
+  return e;
+}
+function add(e, c) {
+  if (c === null || c === undefined || c === false) return;
+  if (Array.isArray(c)) { c.forEach(function (x) { add(e, x); }); return; }
+  e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+}
+function clear(e) { while (e.firstChild) e.removeChild(e.firstChild); }
+function $(sel) { return document.querySelector(sel); }
+function kg(n) { return String(Math.round(Number(n) * 1000) / 1000) + ' kg'; }
+function num(v) { var n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? Math.round(n * 1000) / 1000 : NaN; }
+function when(ts) {
+  try { return new Date(ts).toLocaleString('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+  catch (e) { return String(ts); }
+}
+function label(list, code) { for (var i = 0; i < list.length; i++) if (list[i][0] === code) return list[i][1]; return String(code).replace(/_/g, ' '); }
+function uuid() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  var b = new Uint8Array(16); crypto.getRandomValues(b); b[6] = (b[6] & 15) | 64; b[8] = (b[8] & 63) | 128;
+  var x = Array.prototype.map.call(b, function (n) { return ('0' + n.toString(16)).slice(-2); }).join('');
+  return x.slice(0, 8) + '-' + x.slice(8, 12) + '-' + x.slice(12, 16) + '-' + x.slice(16, 20) + '-' + x.slice(20);
+}
+// One id per distinct request, kept until a save succeeds: sending the same
+// request again after a lost answer is recognised by the server and not saved
+// twice, while a request with different figures gets a new id.
+function cid(key, payload) { var k = key + '|' + JSON.stringify(payload); if (!S.cids[k]) S.cids[k] = uuid(); return S.cids[k]; }
+// Safe only for requests the server recognises as repeats.
+function retry(make, n) {
+  return make().then(null, function (e) {
+    if (!(e instanceof NetErr) || n <= 0) throw e;
+    return new Promise(function (r) { setTimeout(r, 800); }).then(function () { return retry(make, n - 1); });
+  });
+}
+
+// ------------------------------------------------------------------- api
+function NetErr(m) { this.name = 'NetErr'; this.message = m || 'No connection'; }
+function AuthErr(m) { this.name = 'AuthErr'; this.message = m || 'Please sign in again'; }
+function ApiErr(m, code, status) { this.name = 'ApiErr'; this.message = m; this.code = code; this.status = status; }
+function raw(path, opts, timeoutMs) {
+  var ctl = new AbortController(), timer = setTimeout(function () { ctl.abort(); }, timeoutMs || 20000);
+  opts = opts || {}; opts.signal = ctl.signal;
+  return fetch(S.cfg.url + path, opts).then(function (r) { clearTimeout(timer); return r; },
+    function () { clearTimeout(timer); throw new NetErr(); });
+}
+function saveSession(s) { S.session = s; if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s)); else localStorage.removeItem(SESSION_KEY); }
+function signIn(email, password) {
+  return raw('/auth/v1/token?grant_type=password', { method: 'POST', headers: { apikey: S.cfg.key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim().toLowerCase(), password: password }) }).then(function (r) {
+    return r.json().then(null, function () { throw new NetErr('Connection lost'); }).then(function (j) {
+      if (!r.ok) { if (r.status >= 500) throw new NetErr(); throw new ApiErr(j.error_description || j.msg || 'Sign-in failed', j.error, r.status); }
+      saveSession(j); return j;
+    });
+  });
+}
+// Sign-in with a one-time code sent by email (no password). An address with no
+// account is answered exactly like one with an account, so the form cannot be
+// used to find out who is registered.
+function requestCode(email) {
+  return raw('/auth/v1/otp', { method: 'POST', headers: { apikey: S.cfg.key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim().toLowerCase(), create_user: false }) }).then(function (r) {
+    if (r.ok) return true;
+    return r.json().then(null, function () { return {}; }).then(function (j) {
+      if (r.status >= 500) throw new NetErr();
+      if (j.error_code === 'otp_disabled' || /signups not allowed/i.test(j.msg || '')) return true;
+      if (r.status === 429) throw new ApiErr('A code was sent a moment ago. Wait a minute before asking for another.', j.error_code, 429);
+      throw new ApiErr('The code could not be sent (' + (j.msg || j.error_description || 'status ' + r.status) + ').', j.error_code, r.status);
+    });
+  });
+}
+function verifyCode(email, code) {
+  return raw('/auth/v1/verify', { method: 'POST', headers: { apikey: S.cfg.key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'email', email: email.trim().toLowerCase(), token: code }) }).then(function (r) {
+    return r.json().then(null, function () { throw new NetErr('Connection lost'); }).then(function (j) {
+      if (!r.ok) { if (r.status >= 500) throw new NetErr(); throw new ApiErr('That code is wrong or has expired. Check it, or ask for a new one.', j.error_code, r.status); }
+      if (!j.access_token) throw new ApiErr('Sign-in did not complete. Ask for a new code.', 'no_session', r.status);
+      saveSession(j); return j;
+    });
+  });
+}
+var refreshing = null;
+function refreshToken() {
+  if (refreshing) return refreshing;
+  refreshing = raw('/auth/v1/token?grant_type=refresh_token', { method: 'POST', headers: { apikey: S.cfg.key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: S.session.refresh_token }) }).then(function (r) {
+    return r.json().then(null, function () { throw new NetErr('Connection lost'); }).then(function (j) {
+      if (!r.ok) { if (r.status >= 500 || r.status === 429) throw new NetErr(); throw new AuthErr(); }
+      saveSession(j); return j;
+    });
+  }).then(function (j) { refreshing = null; return j; }, function (e) { refreshing = null; throw e; });
+  return refreshing;
+}
+function authed(path, opts, retried) {
+  if (!S.session) return Promise.reject(new AuthErr());
+  var pre = (S.session.expires_at && S.session.expires_at - Date.now() / 1000 < 60) ? refreshToken() : Promise.resolve();
+  return pre.then(function () {
+    opts.headers = Object.assign({}, opts.headers, { apikey: S.cfg.key, Authorization: 'Bearer ' + S.session.access_token });
+    return raw(path, opts);
+  }).then(function (r) {
+    if (r.status === 401 && !retried) return refreshToken().then(function () { return authed(path, opts, true); });
+    return r.text().then(null, function () { throw new NetErr('Connection lost'); }).then(function (t) {
+      var j = null; try { j = t ? JSON.parse(t) : null; } catch (e) { /* not json */ }
+      if (r.ok) return j;
+      if (r.status === 401) throw new AuthErr();
+      // Go by the database's own error code, not the HTTP status (the hosted
+      // gateway answers "not found" with status 500).
+      var msg = String((j && j.message) || 'Request refused').replace(/^catchtrace:\s*/, '');
+      var sqlstate = j && typeof j.code === 'string' && /^[0-9A-Z]{5}$/.test(j.code) ? j.code : null;
+      if (sqlstate && !/^(08|40|53|55|57|58|XX)/.test(sqlstate)) throw new ApiErr(msg, sqlstate, r.status);
+      if (r.status >= 500 || r.status === 408 || r.status === 429) throw new NetErr('Server busy');
+      throw new ApiErr(msg, j && j.code, r.status);
+    });
+  });
+}
+function rpc(fn, args) { return authed('/rest/v1/rpc/' + fn, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Profile': 'catchtrace' }, body: JSON.stringify(args || {}) }); }
+function get(table, query) { return authed('/rest/v1/' + table + '?' + query, { method: 'GET', headers: { 'Accept-Profile': 'catchtrace' } }); }
+
+
+// ---- HoneyTrace page logic. Assembled into app/honey/index.html by tools/build_honey_page.py
+// ------------------------------------------------------------------ lists
+var CLASSES = [['mangrove', 'Mangrove honey'], ['terrestrial', 'Terrestrial (woodland) honey'], ['other', 'Other honey']];
+var HABITATS = [['mangrove', 'Mangrove'], ['terrestrial_woodland', 'Terrestrial woodland'], ['other', 'Other']];
+var HIVE_TYPES = [['kenya_top_bar', 'Kenya top bar'], ['langstroth', 'Langstroth'], ['log', 'Log hive'], ['other', 'Other']];
+var STEPS = [['extraction', 'Extraction'], ['filtration', 'Filtration'], ['settling', 'Settling'], ['warming', 'Warming'], ['decrystallising', 'Decrystallising'], ['other', 'Other']];
+var TESTS = [['moisture', 'Moisture'], ['hmf', 'HMF'], ['diastase', 'Diastase'], ['sugars', 'Sugars'], ['pollen', 'Pollen'], ['residues', 'Residues'], ['other', 'Other']];
+var KINDS = [['jar', 'Jar'], ['bottle', 'Bottle'], ['squeeze_bottle', 'Squeeze bottle'], ['sachet', 'Sachet'], ['bucket', 'Bucket'], ['other', 'Other']];
+var MATERIALS = [['glass', 'Glass'], ['plastic', 'Plastic'], ['metal', 'Metal'], ['paper', 'Paper'], ['other', 'Other']];
+var DEST = [['own_shop', 'Own shop'], ['retail_customer', 'Retail customer'], ['wholesale_customer', 'Wholesale customer'], ['other_processor', 'Another processor'], ['export', 'Export'], ['other', 'Other']];
+var COUNTIES = [['002', 'Kwale'], ['001', 'Mombasa'], ['003', 'Kilifi'], ['004', 'Tana River'], ['005', 'Lamu']];
+
+var S = { cfg: null, session: null, ctx: null, orgs: [], org: null, tab: null, cids: {}, login: { mode: 'password', email: '' },
+          flash: null, busy: false, loading: false, form: null, open: null, found: null, intakeLines: [], picked: {},
+          d: {}, detail: null, codes: null, recallReport: null, rec: null, dash: null };
+
+function me() { return S.orgs.filter(function (m) { return m.organization_id === S.org; })[0]; }
+function isGroup() { var m = me(); return !!m && (m.org_type === 'producer_group' || m.org_type === 'cooperative'); }
+function role(r) { return S.ctx && (S.ctx.memberships || []).some(function (m) { return m.organization_id === S.org && m.active !== false && r.indexOf(m.role) >= 0; }); }
+function canWrite() { return role(['clerk', 'org_admin']); }
+function isAdmin() { return role(['org_admin']) || (S.ctx && S.ctx.is_platform_admin); }
+function today() { return new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 10); }
+function nowLocal() { return new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
+function r3(n) { return Math.round(Number(n) * 1000) / 1000; }
+
+// ------------------------------------------------------------------ data
+function loadBase() {
+  return rpc('my_context').then(function (ctx) {
+    S.ctx = ctx;
+    var seen = {};
+    S.orgs = (ctx.memberships || []).filter(function (m) {
+      if (['clerk', 'org_admin', 'verifier'].indexOf(m.role) < 0 || seen[m.organization_id] || m.active === false) return false;
+      seen[m.organization_id] = true; return true;
+    });
+    var saved = localStorage.getItem('ct.honey.org');
+    var pick = S.orgs.filter(function (m) { return m.organization_id === saved; })[0] || S.orgs[0];
+    S.org = pick ? pick.organization_id : null;
+    if (!S.tab) S.tab = isGroup() ? 'producers' : 'intake';
+  });
+}
+function loadOrg() {
+  var o = 'organization_id=eq.' + S.org, D = {};
+  if (!S.org) { S.d = {}; return Promise.resolve(); }
+  var q = isGroup() ? [
+    get('honey_producers', 'select=id,producer_ref,producer_kind,full_name,community,member_no,show_name_publicly,status&' + o + '&order=full_name.asc'),
+    get('honey_producer_contacts', 'select=producer_id,phone,village'),
+    get('honey_apiaries', 'select=id,apiary_ref,producer_id,name,habitat,habitat_note,community,status&' + o + '&order=name.asc'),
+    get('honey_hives', 'select=id,hive_ref,apiary_id,producer_id,hive_type,label,status&' + o + '&order=label.asc'),
+    get('honey_harvests', 'select=id,harvest_ref,producer_id,apiary_id,harvest_date,honey_class,class_note,quantity_kg,received_kg,method,observations,community_verified_at,document_verified_at,disputed_at,status,void_reason,created_by&' + o + '&order=harvest_date.desc,harvest_ref.desc'),
+    get('honey_apiary_locations', 'select=apiary_id,accuracy_m,source,created_at&is_current=eq.true')
+  ] : [
+    get('honey_intakes', 'select=id,intake_ref,received_at,quantity_kg,consumed_kg,document_ref,note&' + o + '&order=received_at.desc'),
+    get('honey_intake_lines', 'select=id,intake_id,harvest_id,quantity_kg,consumed_kg'),
+    get('honey_harvests', 'select=id,harvest_ref,honey_class,harvest_date,community_verified_at,document_verified_at,disputed_at,status'),
+    get('honey_batches', 'select=id,batch_ref,batch_type,product_name,input_kg,output_kg,loss_kg,consumed_kg,status,started_at,closed_at&' + o + '&order=started_at.desc'),
+    get('honey_package_materials', 'select=id,name,kind,material,net_g,status&' + o + '&order=name.asc'),
+    get('honey_packaging_runs', 'select=id,pack_ref,batch_id,material_id,units,net_g,total_kg,packed_at,best_before&' + o + '&order=packed_at.desc'),
+    get('honey_packages', 'select=id,package_code,run_id,status,scans,token&' + o + '&order=package_code.asc'),
+    get('honey_dispatches', 'select=id,dispatch_ref,destination_type,destination_name,order_ref,dispatched_at&' + o + '&order=dispatched_at.desc'),
+    get('honey_recalls', 'select=id,recall_ref,batch_id,run_id,reason,public_notice,status,opened_at,close_note&' + o + '&order=opened_at.desc'),
+    rpc('honey_reconciliation', { p_org: S.org })
+  ];
+  return Promise.all(q).then(function (r) {
+    if (isGroup()) {
+      D.producers = r[0] || []; D.contacts = {}; (r[1] || []).forEach(function (c) { D.contacts[c.producer_id] = c; });
+      D.apiaries = r[2] || []; D.hives = r[3] || []; D.harvests = r[4] || []; D.locs = {}; (r[5] || []).forEach(function (l) { D.locs[l.apiary_id] = l; });
+    } else {
+      D.intakes = r[0] || []; D.lines = r[1] || []; D.harvests = {}; (r[2] || []).forEach(function (x) { D.harvests[x.id] = x; });
+      D.batches = r[3] || []; D.materials = r[4] || []; D.runs = r[5] || []; D.packages = r[6] || []; D.dispatches = r[7] || [];
+      D.recalls = r[8] || []; D.recon = r[9] || {};
+    }
+    S.d = D;
+  });
+}
+function loadBatch(id) {
+  return Promise.all([
+    get('honey_processing_steps', 'select=id,step,step_note,started_at,ended_at,equipment,operator,loss_kg&batch_id=eq.' + id + '&order=started_at.asc'),
+    get('honey_quality_tests', 'select=id,test_type,test_note,result_value,result_text,unit,method,tested_by,laboratory,tested_at,certificate_ref,document_path&batch_id=eq.' + id + '&order=tested_at.asc'),
+    rpc('honey_trace_batch', { p_batch_id: id })
+  ]).then(function (r) { S.detail = { id: id, steps: r[0] || [], tests: r[1] || [], trace: r[2] || {} }; });
+}
+function start() {
+  S.loading = true; render();
+  return loadBase().then(loadOrg).then(function () { S.loading = false; render(); }, function (e) { S.loading = false; fail(e, true); });
+}
+function reload() { return loadOrg().then(function () { return S.open && S.open.kind === 'batch' ? loadBatch(S.open.id) : null; }); }
+
+// --------------------------------------------------------------- actions
+function setFlash(kind, text) {
+  S.flash = kind ? [kind, text] : null;
+  var b = $('#flash-box'); if (!b) return;
+  clear(b);
+  if (S.flash) { add(b, h('div', { 'class': 'msg ' + kind, id: 'flash', text: text })); if (b.scrollIntoView) b.scrollIntoView({ block: 'nearest' }); }
+}
+function setBusy(on) {
+  S.busy = on;
+  Array.prototype.forEach.call(document.querySelectorAll('button[data-busy]'), function (b) { b.disabled = on; b.textContent = on ? b.getAttribute('data-busy') : b.getAttribute('data-label'); });
+}
+function fail(e, redraw) {
+  S.busy = false;
+  if (e instanceof AuthErr) { saveSession(null); S.ctx = null; S.flash = ['err', 'Your sign-in has ended. Sign in again.']; return render(); }
+  var text = e instanceof NetErr ? 'Connection problem. Press the button again - the same request is never saved twice.' : (e && e.message) || 'Something went wrong.';
+  if (redraw) { S.flash = ['err', text]; return render(); }
+  setBusy(false); setFlash('err', text);
+}
+// Run a write, reload, redraw with a confirmation. once: not repeat-safe.
+function act(make, okText, after, once) {
+  if (S.busy) return;
+  setFlash(null); setBusy(true);
+  (once ? make() : retry(make, 2)).then(function (res) {
+    S.cids = {};
+    var t = typeof okText === 'function' ? okText(res) : okText;
+    if (after) after(res);
+    return reload().then(function () { return t; });
+  }).then(function (t) { S.busy = false; S.flash = ['ok', t]; render(); }, function (e) {
+    if (once && e instanceof NetErr) return reload().then(function () { S.busy = false; S.flash = ['err', 'Connection problem. Look below to see whether it was saved before trying again.']; render(); }, function () { fail(e); });
+    fail(e);
+  });
+}
+function val(id) { var e = $('#' + id); return e ? String(e.value).trim() : ''; }
+function need(cond, text) { if (!cond) { setFlash('err', text); return false; } return true; }
+function afterSignIn() { S.busy = false; S.login = { mode: 'password', email: '' }; return start(); }
+function doSignIn(ev) {
+  ev.preventDefault(); if (S.busy) return;
+  setFlash(null); setBusy(true);
+  signIn($('#email').value, $('#password').value).then(afterSignIn,
+    function (e) { setBusy(false); setFlash('err', e instanceof NetErr ? 'No connection. Try again.' : 'Sign-in failed. Check the email and password.'); });
+}
+function doSignOut() { saveSession(null); S.ctx = null; S.orgs = []; S.org = null; S.d = {}; S.tab = null; S.open = null; S.form = null; S.flash = null; render(); }
+function go(tab) { S.tab = tab; S.open = null; S.form = null; S.detail = null; S.codes = null; S.found = null; S.intakeLines = []; S.picked = {}; S.recallReport = null; S.flash = null; render(); if (tab === 'dash') loadDash(); }
+
+// producers, apiaries, hives
+function doProducer(ev) {
+  ev.preventDefault();
+  var p = { p_org: S.org, p_kind: val('pr-kind'), p_full_name: val('pr-name'), p_community: val('pr-community'), p_county_code: val('pr-county'),
+            p_member_no: val('pr-member') || null, p_phone: val('pr-phone') || null, p_village: val('pr-village') || null, p_show_name_publicly: $('#pr-public').checked };
+  if (!need(p.p_full_name.length >= 2, 'Enter the beekeeper or group name.') || !need(p.p_community.length >= 2, 'Enter the community.')) return;
+  p.p_client_id = cid('producer', p);
+  act(function () { return rpc('register_honey_producer', p); }, function (r) { return 'Registered ' + p.p_full_name + ' (' + r.producer_ref + ').'; }, function () { S.form = null; });
+}
+function doApiary(ev, prod) {
+  ev.preventDefault();
+  var p = { p_producer_id: prod.id, p_name: val('ap-name'), p_habitat: val('ap-habitat'), p_habitat_note: val('ap-note') || null,
+            p_community: val('ap-community') || prod.community, p_county_code: val('ap-county') };
+  if (!need(p.p_name.length >= 2, 'Name the apiary.') || !need(p.p_habitat !== 'other' || p.p_habitat_note, 'Describe the habitat.')) return;
+  p.p_client_id = cid('apiary', p);
+  act(function () { return rpc('register_honey_apiary', p); }, function (r) { return 'Apiary ' + r.apiary_ref + ' registered.'; }, function () { S.form = null; });
+}
+function doHive(ev, ap) {
+  ev.preventDefault();
+  var p = { p_apiary_id: ap.id, p_hive_type: val('hv-type'), p_label: val('hv-label'), p_producer_id: null };
+  if (!need(p.p_label.length >= 1, 'Give the hive its label as painted on it.')) return;
+  p.p_client_id = cid('hive', p);
+  act(function () { return rpc('register_honey_hive', p); }, function (r) { return 'Hive ' + r.hive_ref + ' registered.'; }, function () { S.form = null; });
+}
+function doLocation(ev, ap) {
+  ev.preventDefault();
+  var lat = num(val('loc-lat')), lon = num(val('loc-lon')), acc = num(val('loc-acc'));
+  if (!need(isFinite(lat) && isFinite(lon), 'Enter latitude and longitude, or use this phone\'s position.')) return;
+  act(function () { return rpc('set_honey_apiary_location', { p_apiary_id: ap.id, p_lat: lat, p_lon: lon, p_accuracy_m: isFinite(acc) ? acc : null, p_source: val('loc-src') || 'gps' }); },
+    'Location saved. Only your organisation can see it; the public passport shows only the community and county.', function () { S.form = null; });
+}
+function useGps() {
+  if (!navigator.geolocation) return setFlash('err', 'This device cannot give a position.');
+  navigator.geolocation.getCurrentPosition(function (pos) {
+    $('#loc-lat').value = pos.coords.latitude.toFixed(6); $('#loc-lon').value = pos.coords.longitude.toFixed(6);
+    $('#loc-acc').value = Math.round(pos.coords.accuracy); $('#loc-src').value = 'gps';
+  }, function () { setFlash('err', 'The position could not be read. Enter it by hand.'); }, { enableHighAccuracy: true, timeout: 20000 });
+}
+// harvests
+function doHarvest(ev) {
+  ev.preventDefault();
+  var ap = S.d.apiaries.filter(function (a) { return a.id === val('hh-apiary'); })[0];
+  var hives = Array.prototype.filter.call(document.querySelectorAll('.hh-hive'), function (c) { return c.checked; }).map(function (c) { return c.value; });
+  var kgv = num(val('hh-kg'));
+  if (!need(ap, 'Choose the apiary.') || !need(val('hh-method').length >= 2, 'Say how the honey was harvested.') || !need(kgv > 0, 'Enter the weight harvested in kg.') || !need(val('hh-date'), 'Enter the harvest date.')) return;
+  var p = { p_apiary_id: ap.id, p_producer_id: ap.producer_id, p_hive_ids: hives.length ? hives : null, p_harvest_date: val('hh-date'),
+            p_honey_class: val('hh-class'), p_class_note: val('hh-classnote') || null, p_quantity_kg: kgv, p_method: val('hh-method'),
+            p_observations: val('hh-obs') || null, p_location_note: val('hh-loc') || null };
+  p.p_client_id = cid('harvest', p);
+  act(function () { return rpc('record_honey_harvest', p); }, function (r) { return 'Harvest ' + r.harvest_ref + ' recorded: ' + kg(kgv) + '. Give this reference to the buyer.'; }, function () { S.form = null; });
+}
+function doVerify(ev, hv) {
+  ev.preventDefault();
+  var t = val('vf-type'), o = val('vf-outcome'), e = val('vf-evidence');
+  if (!need(t !== 'document' || e, 'A document check needs the document reference.')) return;
+  act(function () { return rpc('verify_honey_harvest', { p_harvest_id: hv.id, p_type: t, p_outcome: o, p_evidence_ref: e || null, p_note: val('vf-note') || null }); },
+    'Recorded: ' + hv.harvest_ref + ' ' + (o === 'verified' ? 'confirmed' : 'rejected') + '.', function () { S.form = null; }, true);
+}
+function doVoidHarvest(ev, hv) {
+  ev.preventDefault();
+  if (!need(val('vd-reason').length >= 3, 'Say why the harvest is withdrawn.')) return;
+  act(function () { return rpc('void_honey_harvest', { p_harvest_id: hv.id, p_reason: val('vd-reason') }); }, hv.harvest_ref + ' withdrawn. It stays on record.', function () { S.form = null; }, true);
+}
+// intake
+function doFind(ev) {
+  ev.preventDefault();
+  var ref = val('find-ref').toUpperCase();
+  if (!need(/^HHV-/.test(ref), 'Enter the harvest reference, for example HHV-261120-000001.')) return;
+  setFlash(null); setBusy(true);
+  rpc('find_honey_harvest', { p_harvest_ref: ref }).then(function (r) {
+    setBusy(false);
+    if (!r || !r.found) return setFlash('err', 'No harvest with that reference.');
+    if (S.intakeLines.some(function (l) { return l.harvest_id === r.harvest_id; })) return setFlash('err', 'That harvest is already on this delivery.');
+    S.intakeLines.push(Object.assign({ kg: r.remaining_kg }, r)); S.flash = null; render();
+  }, function (e) { fail(e); });
+}
+function doIntake(ev) {
+  ev.preventDefault();
+  var lines = [], bad = null;
+  S.intakeLines.forEach(function (l, i) {
+    var v = num(val('il-' + i)); if (!(v > 0) || v > Number(l.remaining_kg)) bad = l.harvest_ref + ': enter between 0 and ' + l.remaining_kg + ' kg.';
+    lines.push({ harvest_id: l.harvest_id, quantity_kg: v });
+  });
+  if (!need(lines.length, 'Add at least one harvest.') || !need(!bad, bad)) return;
+  var p = { p_org: S.org, p_received_at: new Date(val('in-at') || Date.now()).toISOString(), p_lines: lines, p_document_ref: val('in-doc') || null, p_note: val('in-note') || null };
+  p.p_client_id = cid('intake', p);
+  act(function () { return rpc('record_honey_intake', p); }, function (r) { return 'Delivery ' + r.intake_ref + ' received: ' + kg(r.quantity_kg) + '.'; }, function () { S.intakeLines = []; S.form = null; });
+}
+// batches
+function batchById(id) { return (S.d.batches || []).filter(function (b) { return b.id === id; })[0]; }
+function doBatch(ev) {
+  ev.preventDefault();
+  var type = val('bt-type'), inputs = [], bad = null;
+  Object.keys(S.picked).forEach(function (k) {
+    var v = num(val('pk-' + k)), src = S.picked[k];
+    if (!(v > 0) || v > src.left) bad = src.label + ': enter between 0 and ' + src.left + ' kg.';
+    inputs.push(src.kind === 'line' ? { intake_id: src.intake_id, harvest_id: src.harvest_id, quantity_kg: v } : { batch_id: src.id, quantity_kg: v });
+  });
+  if (!need(inputs.length, 'Tick at least one delivery or batch to take honey from.') || !need(!bad, bad)) return;
+  var p = { p_org: S.org, p_batch_type: type, p_product_name: val('bt-name') || null, p_inputs: inputs };
+  p.p_client_id = cid('batch', p);
+  act(function () { return rpc('create_honey_batch', p); }, function (r) { return 'Batch ' + r.batch_ref + ' started with ' + kg(r.input_kg) + '.'; },
+    function (r) { S.picked = {}; S.form = null; S.open = { kind: 'batch', id: r.batch_id }; });
+}
+function doStep(ev, b) {
+  ev.preventDefault();
+  if (!need(val('st-op').length >= 2, 'Say who did the work.')) return;
+  var loss = num(val('st-loss'));
+  act(function () { return rpc('record_honey_processing_step', { p_batch_id: b.id, p_step: val('st-step'), p_step_note: val('st-note') || null,
+    p_started_at: new Date(val('st-start') || Date.now()).toISOString(), p_ended_at: val('st-end') ? new Date(val('st-end')).toISOString() : null,
+    p_equipment: val('st-eq') || null, p_operator: val('st-op'), p_loss_kg: isFinite(loss) ? loss : null }); }, 'Step recorded.', function () { S.form = null; }, true);
+}
+function doCloseBatch(ev, b) {
+  ev.preventDefault();
+  var out = num(val('cl-out'));
+  if (!need(out >= 0 && out <= Number(b.input_kg), 'The weight out must be between 0 and ' + b.input_kg + ' kg.')) return;
+  act(function () { return rpc('close_honey_batch', { p_batch_id: b.id, p_output_kg: out }); }, function (r) { return b.batch_ref + ' closed: ' + kg(r.output_kg) + ' out, ' + kg(r.loss_kg) + ' lost.'; }, function () { S.form = null; }, true);
+}
+function upload(path, file, retried) {
+  var pre = (S.session.expires_at && S.session.expires_at - Date.now() / 1000 < 60) ? refreshToken() : Promise.resolve();
+  return pre.then(function () {
+    return raw('/storage/v1/object/honey-documents/' + path, { method: 'POST', body: file,
+      headers: { apikey: S.cfg.key, Authorization: 'Bearer ' + S.session.access_token, 'Content-Type': file.type, 'x-upsert': 'false' } }, 90000);
+  }).then(function (r) {
+    if (r.ok) return true;
+    return r.text().then(function (t) {
+      var j = {}; try { j = JSON.parse(t) || {}; } catch (e) { /* not json */ }
+      var code = String(j.statusCode || r.status);
+      if (code === '409') return true;
+      if (code === '401' && !retried) return refreshToken().then(function () { return upload(path, file, true); });
+      if (code === '413') throw new ApiErr('The document is larger than 10 MB.', 'HD413', r.status);
+      if (code === '415' || code === '400') throw new ApiErr('Use a PDF, JPG or PNG file.', 'HD415', r.status);
+      if (code === '403') throw new ApiErr('Not allowed to add documents to this batch.', 'HD403', r.status);
+      throw new NetErr('Server busy');
+    });
+  });
+}
+function doTest(ev, b) {
+  ev.preventDefault();
+  var v = num(val('ts-value')), f = $('#ts-file').files[0];
+  if (!need(isFinite(v) || val('ts-text'), 'Enter the result.') || !need(val('ts-by').length >= 2, 'Say who tested it.') || !need(val('ts-date'), 'Enter the test date.')) return;
+  if (f && !need(/^(application\/pdf|image\/jpeg|image\/png)$/.test(f.type), 'Use a PDF, JPG or PNG file.')) return;
+  var path = f ? S.org + '/' + b.id + '/' + uuid() + (f.type === 'application/pdf' ? '.pdf' : f.type === 'image/png' ? '.png' : '.jpg') : null;
+  act(function () {
+    return (f ? upload(path, f) : Promise.resolve()).then(function () {
+      return rpc('record_honey_quality_test', { p_batch_id: b.id, p_test_type: val('ts-type'), p_test_note: val('ts-note') || null,
+        p_result_value: isFinite(v) ? v : null, p_result_text: val('ts-text') || null, p_unit: val('ts-unit') || null, p_method: val('ts-method') || null,
+        p_tested_by: val('ts-by'), p_laboratory: val('ts-lab') || null, p_tested_at: val('ts-date'), p_certificate_ref: val('ts-cert') || null, p_document_path: path });
+    });
+  }, 'Result recorded as entered. HoneyTrace does not grade it or make quality claims.', function () { S.form = null; }, true);
+}
+// The window is opened during the tap (so it is not blocked as a pop-up), then
+// pointed at a link that works for 5 minutes.
+function openDoc(path) {
+  var w = window.open('', '_blank');
+  authed('/storage/v1/object/sign/honey-documents/' + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expiresIn: 300 }) })
+    .then(function (j) {
+      var u = j && (j.signedURL || j.signedUrl);
+      if (!u) throw new ApiErr('The document could not be opened.');
+      if (w) { w.opener = null; w.location.href = S.cfg.url + '/storage/v1' + u; } else location.href = S.cfg.url + '/storage/v1' + u;
+    }).then(null, function (e) { if (w) w.close(); fail(e); });
+}
+function doMaterial(ev) {
+  ev.preventDefault();
+  var g = num(val('mt-g'));
+  if (!need(val('mt-name').length >= 2, 'Name the package, for example "250 g glass jar".') || !need(g > 0, 'Enter the net honey per package in grams.')) return;
+  act(function () { return rpc('add_honey_package_material', { p_org: S.org, p_name: val('mt-name'), p_kind: val('mt-kind'), p_material: val('mt-mat'), p_net_g: g }); },
+    'Package type added.', function () { S.form = 'pack'; }, true);
+}
+function doPack(ev, b) {
+  ev.preventDefault();
+  var units = parseInt(val('pk-units'), 10);
+  if (!need(val('pk-mat'), 'Add a package type first.') || !need(units > 0 && units <= 5000, 'Enter how many packages (1 to 5000).')) return;
+  var p = { p_batch_id: b.id, p_material_id: val('pk-mat'), p_units: units, p_packed_at: new Date(val('pk-at') || Date.now()).toISOString(), p_best_before: val('pk-bb') || null };
+  p.p_client_id = cid('pack', p);
+  act(function () { return rpc('record_honey_packaging', p); }, function (r) { return 'Packed ' + r.units + ' units (' + r.pack_ref + '). Print the QR labels below.'; },
+    function (r) { S.form = null; S.codesFor = r.run_id; });
+}
+function showCodes(run) {
+  setFlash(null);
+  rpc('honey_run_codes', { p_run_id: run.id }).then(function (c) { S.codes = Object.assign({ run: run }, c); render(); var e = $('#codes'); if (e && e.scrollIntoView) e.scrollIntoView(); }, function (e) { fail(e); });
+}
+function doRecall(ev, target) {
+  ev.preventDefault();
+  if (!need(val('rc-reason').length >= 10 && val('rc-notice').length >= 10, 'Give the reason and the notice customers will see (at least 10 letters each).')) return;
+  act(function () { return rpc('open_honey_recall', { p_batch_id: target.batch || null, p_run_id: target.run || null, p_reason: val('rc-reason'), p_public_notice: val('rc-notice') }); },
+    function (r) { return 'Recall ' + r.recall_ref + ' opened: ' + r.packages_affected + ' packages, ' + r.packages_with_customers + ' already with customers. Their QR pages now show the notice.'; },
+    function () { S.form = null; }, true);
+}
+function doCloseRecall(ev, rc) {
+  ev.preventDefault();
+  if (!need(val('rcc-note').length >= 10, 'Say how the recall was resolved.')) return;
+  act(function () { return rpc('close_honey_recall', { p_recall_id: rc.id, p_note: val('rcc-note') }); }, rc.recall_ref + ' closed.', function () { S.form = null; S.recallReport = null; }, true);
+}
+function showRecall(rc) { rpc('honey_recall_report', { p_recall_id: rc.id }).then(function (r) { S.recallReport = Object.assign({ id: rc.id }, r); render(); }, function (e) { fail(e); }); }
+// stock: dispatch and returns
+// Accepts typed jar codes and scanned jar QR codes (the passport link carries the jar's token).
+function codesFrom(text) {
+  var byToken = {}; (S.d.packages || []).forEach(function (k) { byToken[k.token] = k.package_code; });
+  return String(text).split(/[\s,;]+/).filter(Boolean).map(function (c) {
+    var t = /[?&]h=([0-9a-fA-F]{32})/.exec(c); if (t) return byToken[t[1].toLowerCase()] || c;
+    var m = /(HPK-\d{6}-\d{6}-\d{4})/i.exec(c); return m ? m[1].toUpperCase() : c.toUpperCase();
+  });
+}
+function doDispatch(ev) {
+  ev.preventDefault();
+  var codes = codesFrom(val('ds-codes'));
+  if (!need(codes.length, 'Scan or type the package codes being sent.') || !need(val('ds-name').length >= 2, 'Say where it is going.')) return;
+  var p = { p_org: S.org, p_destination_type: val('ds-type'), p_destination_name: val('ds-name'), p_order_ref: val('ds-order') || null, p_package_codes: codes, p_dispatched_at: new Date().toISOString() };
+  p.p_client_id = cid('dispatch', p);
+  act(function () { return rpc('record_honey_dispatch', p); }, function (r) { return 'Sent: ' + r.packages + ' packages (' + r.dispatch_ref + ').'; }, function () { S.form = null; });
+}
+function doReturn(ev) {
+  ev.preventDefault();
+  var code = codesFrom(val('rt-code'))[0];
+  if (!need(code, 'Scan or type the package code.') || !need(val('rt-reason').length >= 3, 'Give the reason for the return.')) return;
+  act(function () { return rpc('record_honey_return', { p_package_code: code, p_reason: val('rt-reason'), p_outcome: val('rt-out'), p_returned_at: new Date().toISOString() }); },
+    function (r) { return 'Return ' + r.return_ref + ': ' + r.package_code + ' ' + (r.outcome === 'restocked' ? 'back in stock.' : 'written off.'); }, function () { S.form = null; }, true);
+}
+function loadDash() {
+  var from = val('dash-from') || new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10), to = val('dash-to') || today();
+  var demo = $('#dash-demo') ? $('#dash-demo').checked : false;
+  S.dash = { from: from, to: to, demo: demo, data: null }; render();
+  rpc('honey_analytics', { p_from: from, p_to: to, p_include_demo: demo }).then(function (d) { S.dash.data = d; render(); }, function (e) { fail(e, true); });
+}
+
+// ---------------------------------------------------------------- render
+function sel(id, list, value, onchange) { return h('select', { id: id, onchange: onchange }, list.map(function (c) { return h('option', { value: c[0], selected: c[0] === value, text: c[1] }); })); }
+function field(text, input) { return [h('label', { 'for': input.id, text: text }), input]; }
+function flash() { return h('div', { id: 'flash-box' }, S.flash ? h('div', { 'class': 'msg ' + S.flash[0], id: 'flash', text: S.flash[1] }) : null); }
+function btn(id, text, busyText, cls, onclick, type) {
+  return h('button', { id: id, type: type || 'button', 'class': cls, 'data-label': text, 'data-busy': busyText, disabled: S.busy, text: S.busy ? busyText : text, onclick: onclick });
+}
+function toggle(name, text, cls) { return h('button', { type: 'button', 'class': 'sec small ' + (cls || ''), id: 'open-' + name, text: text, onclick: function () { S.form = S.form === name ? null : name; S.flash = null; render(); } }); }
+function cancel() { return h('button', { type: 'button', 'class': 'sec', text: 'Cancel', onclick: function () { S.form = null; S.flash = null; render(); } }); }
+function input(id, attrs) { return h('input', Object.assign({ id: id }, attrs || {})); }
+function verifBadges(x) {
+  x = { community_verified_at: x.community_verified_at || x.community_verified, document_verified_at: x.document_verified_at || x.document_verified, disputed_at: x.disputed_at || x.disputed };
+  return [x.community_verified_at ? h('span', { 'class': 'badge ok', text: 'Community verified' }) : null,
+          x.document_verified_at ? h('span', { 'class': 'badge ok', text: 'Document verified' }) : null,
+          x.disputed_at ? h('span', { 'class': 'badge bad', text: 'Disputed' }) : null,
+          !x.community_verified_at && !x.document_verified_at && !x.disputed_at ? h('span', { 'class': 'badge wait', text: 'Not yet verified' }) : null];
+}
+function tabs() {
+  var list = isGroup() ? [['producers', 'Beekeepers'], ['harvests', 'Harvests'], ['dash', 'Dashboard']]
+                       : [['intake', 'Intake'], ['batches', 'Batches'], ['stock', 'Stock'], ['dash', 'Dashboard']];
+  return h('div', { 'class': 'tabs' }, list.map(function (t) { return h('button', { id: 'tab-' + t[0], 'class': S.tab === t[0] ? 'on' : '', text: t[1], onclick: function () { go(t[0]); } }); }));
+}
+function orgPicker() {
+  if (S.orgs.length < 2) return null;
+  return h('div', { 'class': 'card' }, field('Working for', h('select', { id: 'org-pick', onchange: function (e) {
+    S.org = e.target.value; localStorage.setItem('ct.honey.org', S.org); S.tab = isGroup() ? 'producers' : 'intake'; S.open = null; S.form = null; S.flash = null; S.loading = true; render();
+    loadOrg().then(function () { S.loading = false; render(); }, function (err) { S.loading = false; fail(err, true); });
+  } }, S.orgs.map(function (m) { return h('option', { value: m.organization_id, selected: m.organization_id === S.org, text: m.organization }); }))));
+}
+// ---- producers
+function viewProducers() {
+  var D = S.d, out = [h('div', { 'class': 'row' }, h('h2', { text: 'Beekeepers and groups' }), canWrite() ? toggle('producer', 'Register') : null), flash()];
+  if (S.form === 'producer') out.push(h('form', { 'class': 'card', id: 'form-producer', onsubmit: doProducer },
+    field('Registering', sel('pr-kind', [['individual', 'An individual beekeeper'], ['group', 'A community group']], 'individual')),
+    field('Full name', input('pr-name', { autocomplete: 'off' })),
+    h('div', { 'class': 'grid2' }, h('div', {}, field('Community', input('pr-community', { placeholder: 'For example: Majoreni' }))), h('div', {}, field('County', sel('pr-county', COUNTIES, '002')))),
+    field('Member number (optional)', input('pr-member')),
+    h('div', { 'class': 'grid2' }, h('div', {}, field('Phone (private)', input('pr-phone', { type: 'tel' }))), h('div', {}, field('Village (private)', input('pr-village')))),
+    h('div', { 'class': 'pickrow', style: 'margin-top:12px' }, h('input', { type: 'checkbox', id: 'pr-public' }), h('label', { 'for': 'pr-public', style: 'margin:0', text: 'The beekeeper agrees to their name appearing on the public jar page' })),
+    h('p', { 'class': 'muted', text: 'Phone and village are seen only by your organisation. Without agreement, the public page shows only the community.' }),
+    h('div', { 'class': 'actions' }, btn('btn-producer', 'Register', 'Saving...', '', null, 'submit'), cancel())));
+  if (!D.producers.length) out.push(h('div', { 'class': 'card muted', text: 'No beekeepers registered yet.' }));
+  D.producers.forEach(function (p) {
+    var c = D.contacts[p.id] || {}, aps = D.apiaries.filter(function (a) { return a.producer_id === p.id; });
+    var card = h('div', { 'class': 'card producer', 'data-ref': p.producer_ref },
+      h('div', { 'class': 'name', text: p.full_name }), h('span', { 'class': 'ref', text: p.producer_ref + ' ' }),
+      h('span', { 'class': 'badge', text: p.producer_kind === 'group' ? 'Group' : 'Beekeeper' }),
+      p.show_name_publicly ? h('span', { 'class': 'badge ok', text: 'Name may be shown publicly' }) : h('span', { 'class': 'badge', text: 'Name kept private' }),
+      h('div', { 'class': 'muted', text: p.community + (p.member_no ? ' - member ' + p.member_no : '') + (c.phone ? ' - ' + c.phone : '') + (c.village ? ' - ' + c.village : '') }));
+    aps.forEach(function (a) {
+      var hv = D.hives.filter(function (x) { return x.apiary_id === a.id; }), loc = D.locs[a.id];
+      add(card, h('div', { 'class': 'sub apiary', 'data-ref': a.apiary_ref },
+        h('div', {}, h('strong', { text: a.name + ' ' }), h('span', { 'class': 'ref', text: a.apiary_ref + ' ' }), h('span', { 'class': 'badge ' + (a.habitat === 'mangrove' ? 'ok' : ''), text: label(HABITATS, a.habitat) })),
+        h('div', { 'class': 'muted', text: (a.habitat_note ? a.habitat_note + ' - ' : '') + (loc ? 'Position on file (private, about ' + (loc.accuracy_m || '?') + ' m)' : 'No position on file') }),
+        h('div', { 'class': 'muted', text: hv.length ? 'Hives: ' + hv.map(function (x) { return x.label + ' (' + x.hive_ref + ')'; }).join(', ') : 'No hives yet' }),
+        canWrite() ? h('div', { 'class': 'actions' }, toggle('hive-' + a.id, 'Add hive'), toggle('loc-' + a.id, loc ? 'Update position' : 'Add position')) : null,
+        S.form === 'hive-' + a.id ? h('form', { id: 'form-hive', onsubmit: function (e) { doHive(e, a); } },
+          h('div', { 'class': 'grid2' }, h('div', {}, field('Hive type', sel('hv-type', HIVE_TYPES, 'kenya_top_bar'))), h('div', {}, field('Label on the hive', input('hv-label')))),
+          h('div', { 'class': 'actions' }, btn('btn-hive', 'Add hive', 'Saving...', '', null, 'submit'), cancel())) : null,
+        S.form === 'loc-' + a.id ? h('form', { id: 'form-loc', onsubmit: function (e) { doLocation(e, a); } },
+          h('p', { 'class': 'muted', text: 'The exact position is private to your organisation. It is never on the public page or shared with buyers.' }),
+          h('button', { type: 'button', 'class': 'sec', id: 'btn-gps', text: 'Use this phone\'s position', onclick: useGps }),
+          h('div', { 'class': 'grid2' }, h('div', {}, field('Latitude', input('loc-lat', { inputmode: 'decimal' }))), h('div', {}, field('Longitude', input('loc-lon', { inputmode: 'decimal' })))),
+          h('div', { 'class': 'grid2' }, h('div', {}, field('Accuracy, metres', input('loc-acc', { inputmode: 'numeric' }))), h('div', {}, field('Source', sel('loc-src', [['gps', 'Phone GPS'], ['map', 'Map'], ['survey', 'Survey']], 'gps')))),
+          h('div', { 'class': 'actions' }, btn('btn-loc', 'Save position', 'Saving...', '', null, 'submit'), cancel())) : null));
+    });
+    if (canWrite()) add(card, h('div', { 'class': 'actions' }, toggle('apiary-' + p.id, 'Add apiary')));
+    if (S.form === 'apiary-' + p.id) add(card, h('form', { id: 'form-apiary', onsubmit: function (e) { doApiary(e, p); } },
+      field('Apiary name', input('ap-name', { placeholder: 'For example: Creek-side apiary' })),
+      h('div', { 'class': 'grid2' }, h('div', {}, field('Habitat', sel('ap-habitat', HABITATS, 'mangrove'))), h('div', {}, field('County', sel('ap-county', COUNTIES, '002')))),
+      field('Habitat note (required for "Other")', input('ap-note')), field('Community', input('ap-community', { value: p.community })),
+      h('div', { 'class': 'actions' }, btn('btn-apiary', 'Register apiary', 'Saving...', '', null, 'submit'), cancel())));
+    out.push(card);
+  });
+  return out;
+}
+// ---- harvests
+function viewHarvests() {
+  var D = S.d, out = [h('div', { 'class': 'row' }, h('h2', { text: 'Harvests' }), canWrite() && D.apiaries.length ? toggle('harvest', 'Record a harvest') : null), flash()];
+  if (S.form === 'harvest') {
+    var apOpts = D.apiaries.map(function (a) { var p = D.producers.filter(function (x) { return x.id === a.producer_id; })[0]; return [a.id, a.name + ' - ' + (p ? p.full_name : '') + ' (' + label(HABITATS, a.habitat) + ')']; });
+    var cur = S.hhApiary || (apOpts[0] && apOpts[0][0]), curAp = D.apiaries.filter(function (a) { return a.id === cur; })[0] || {};
+    var hives = D.hives.filter(function (x) { return x.apiary_id === cur; });
+    out.push(h('form', { 'class': 'card', id: 'form-harvest', onsubmit: doHarvest },
+      field('Apiary', sel('hh-apiary', apOpts, cur, function (e) { S.hhApiary = e.target.value; render(); })),
+      hives.length ? h('div', {}, h('label', { text: 'Hives harvested' }), hives.map(function (x) {
+        return h('div', { 'class': 'pickrow' }, h('input', { type: 'checkbox', 'class': 'hh-hive', id: 'hh-' + x.id, value: x.id }), h('label', { 'for': 'hh-' + x.id, style: 'margin:4px 0', text: x.label + ' (' + x.hive_ref + ')' }));
+      })) : h('div', { 'class': 'muted', text: 'This apiary has no hives registered.' }),
+      h('div', { 'class': 'grid2' }, h('div', {}, field('Harvest date', input('hh-date', { type: 'date', value: today(), max: today() }))), h('div', {}, field('Weight harvested, kg', input('hh-kg', { inputmode: 'decimal' })))),
+      field('Honey type', sel('hh-class', CLASSES, curAp.habitat === 'terrestrial_woodland' ? 'terrestrial' : curAp.habitat === 'other' ? 'other' : 'mangrove')),
+      h('p', { 'class': 'muted', text: 'Mangrove honey can only come from an apiary registered in mangrove; terrestrial honey only from a woodland apiary.' }),
+      field('Honey type note (required for "Other")', input('hh-classnote')),
+      field('Harvest method', input('hh-method', { placeholder: 'For example: smoker, press' })),
+      field('Where exactly (optional, private)', input('hh-loc')), field('Observations (optional)', h('textarea', { id: 'hh-obs', rows: 2 })),
+      h('div', { 'class': 'actions' }, btn('btn-harvest', 'Record harvest', 'Saving...', '', null, 'submit'), cancel())));
+  }
+  if (!D.harvests.length) out.push(h('div', { 'class': 'card muted', text: 'No harvests recorded yet.' }));
+  D.harvests.forEach(function (x) {
+    var ap = D.apiaries.filter(function (a) { return a.id === x.apiary_id; })[0] || {}, p = D.producers.filter(function (a) { return a.id === x.producer_id; })[0] || {};
+    var mine = S.ctx && x.created_by === S.ctx.user_id, verifier = role(['verifier']);
+    out.push(h('div', { 'class': 'card harvest', 'data-ref': x.harvest_ref },
+      h('div', { 'class': 'row' }, h('div', {}, h('div', { 'class': 'name', text: label(CLASSES, x.honey_class) + ' - ' + kg(x.quantity_kg) }), h('span', { 'class': 'ref', text: x.harvest_ref })),
+        x.status === 'void' ? h('span', { 'class': 'badge bad', text: 'Withdrawn' }) : null),
+      h('div', { 'class': 'muted', text: p.full_name + ' - ' + ap.name + ' - ' + x.harvest_date }),
+      h('div', { 'class': 'muted', text: kg(x.received_kg) + ' collected by buyers, ' + kg(r3(x.quantity_kg - x.received_kg)) + ' not yet collected' }),
+      x.status === 'void' ? h('div', { 'class': 'muted', text: 'Reason: ' + x.void_reason }) : h('div', {}, verifBadges(x)),
+      x.status !== 'void' ? h('div', { 'class': 'actions' }, verifier && !mine ? toggle('verify-' + x.id, 'Verify') : null,
+        canWrite() && Number(x.received_kg) === 0 ? toggle('void-' + x.id, 'Withdraw', 'danger') : null) : null,
+      S.form === 'verify-' + x.id ? h('form', { id: 'form-verify', onsubmit: function (e) { doVerify(e, x); } },
+        h('div', { 'class': 'grid2' }, h('div', {}, field('Check', sel('vf-type', [['community', 'Community check'], ['document', 'Document check']], 'community'))),
+          h('div', {}, field('Outcome', sel('vf-outcome', [['verified', 'Confirmed'], ['rejected', 'Rejected']], 'verified')))),
+        field('Evidence (document or photo reference; required for a document check)', input('vf-evidence')), field('Note (optional)', input('vf-note')),
+        h('div', { 'class': 'actions' }, btn('btn-verify', 'Save check', 'Saving...', '', null, 'submit'), cancel())) : null,
+      S.form === 'void-' + x.id ? h('form', { id: 'form-void', onsubmit: function (e) { doVoidHarvest(e, x); } },
+        field('Why is it withdrawn?', input('vd-reason')), h('div', { 'class': 'actions' }, btn('btn-void', 'Withdraw harvest', 'Saving...', 'danger', null, 'submit'), cancel())) : null));
+  });
+  return out;
+}
+// ---- intake (buyer)
+function lineLabel(l) { var x = S.d.harvests[l.harvest_id] || {}; return (x.harvest_ref || 'harvest') + ' - ' + label(CLASSES, x.honey_class); }
+function viewIntake() {
+  var D = S.d, out = [h('div', { 'class': 'row' }, h('h2', { text: 'Honey received' }), canWrite() ? toggle('intake', 'Receive honey') : null), flash()];
+  if (S.form === 'intake') out.push(h('div', { 'class': 'card', id: 'form-intake' },
+    h('p', { 'class': 'muted', text: 'Ask the beekeepers\' group for each harvest reference (HHV-...). A delivery can carry several harvests, and a harvest can come in several deliveries.' }),
+    h('form', { id: 'form-find', onsubmit: doFind }, field('Harvest reference', input('find-ref', { placeholder: 'HHV-261120-000001', autocomplete: 'off' })),
+      h('div', { 'class': 'actions' }, btn('btn-find', 'Add to this delivery', 'Looking...', 'sec', null, 'submit'))),
+    h('form', { onsubmit: doIntake },
+      S.intakeLines.map(function (l, i) {
+        return h('div', { 'class': 'sub intake-line' }, h('strong', { text: l.harvest_ref + ' - ' + label(CLASSES, l.honey_class) }),
+          h('div', { 'class': 'muted', text: l.producer_group + ' - ' + l.community + ' - harvested ' + l.harvest_date + ', ' + kg(l.quantity_kg) + ', ' + kg(l.remaining_kg) + ' not yet collected' }),
+          field('Kg received now', input('il-' + i, { inputmode: 'decimal', value: l.kg })));
+      }),
+      field('Received at', input('in-at', { type: 'datetime-local', value: nowLocal() })),
+      field('Delivery note number (optional)', input('in-doc')), field('Note (optional)', input('in-note')),
+      h('div', { 'class': 'actions' }, btn('btn-intake', 'Record delivery', 'Saving...', '', null, 'submit'), cancel()))));
+  if (!D.intakes.length) out.push(h('div', { 'class': 'card muted', text: 'No honey received yet.' }));
+  D.intakes.forEach(function (i) {
+    out.push(h('div', { 'class': 'card intake', 'data-ref': i.intake_ref }, h('div', { 'class': 'name', text: kg(i.quantity_kg) + ' received' }),
+      h('span', { 'class': 'ref', text: i.intake_ref }), h('div', { 'class': 'muted', text: when(i.received_at) + (i.document_ref ? ' - note ' + i.document_ref : '') }),
+      D.lines.filter(function (l) { return l.intake_id === i.id; }).map(function (l) {
+        return h('div', { 'class': 'muted', text: lineLabel(l) + ': ' + kg(l.quantity_kg) + ', ' + kg(r3(l.quantity_kg - l.consumed_kg)) + ' not yet in a batch' });
+      })));
+  });
+  return out;
+}
+// ---- batches (buyer)
+function sources() {
+  var D = S.d, list = [];
+  D.lines.forEach(function (l) {
+    var left = r3(l.quantity_kg - l.consumed_kg), i = D.intakes.filter(function (x) { return x.id === l.intake_id; })[0];
+    if (left > 0 && i) list.push({ key: 'l' + l.id, kind: 'line', intake_id: i.id, harvest_id: l.harvest_id, left: left, label: i.intake_ref + ' / ' + lineLabel(l) });
+  });
+  D.batches.forEach(function (b) {
+    var left = b.status === 'closed' ? r3(b.output_kg - b.consumed_kg) : 0;
+    if (left > 0) list.push({ key: 'b' + b.id, kind: 'batch', id: b.id, left: left, label: b.batch_ref + ' - ' + (b.product_name || b.batch_type) });
+  });
+  return list;
+}
+function viewBatches() {
+  var D = S.d, out = [h('div', { 'class': 'row' }, h('h2', { text: 'Batches' }), canWrite() ? toggle('batch', 'New batch') : null), flash()];
+  if (S.form === 'batch') {
+    var src = sources();
+    out.push(h('form', { 'class': 'card', id: 'form-batch', onsubmit: doBatch },
+      field('Kind of batch', sel('bt-type', [['processing', 'Processing (extract, filter, settle)'], ['blend', 'Blend of two or more lots'], ['split', 'Split part of one batch']], S.btType || 'processing', function (e) { S.btType = e.target.value; })),
+      field('Product name (optional)', input('bt-name', { placeholder: 'For example: Raw mangrove honey' })),
+      h('label', { text: 'Take honey from' }),
+      src.length ? src.map(function (s) {
+        var on = !!S.picked[s.key];
+        return h('div', { 'class': 'sub' }, h('div', { 'class': 'pickrow' },
+          h('input', { type: 'checkbox', id: 'cb-' + s.key, checked: on, onchange: function (e) { if (e.target.checked) S.picked[s.key] = s; else delete S.picked[s.key]; render(); } }),
+          h('label', { 'for': 'cb-' + s.key, style: 'margin:0', text: s.label + ' - ' + kg(s.left) + ' available' })),
+          on ? field('Kg taken', input('pk-' + s.key, { inputmode: 'decimal', value: s.left })) : null);
+      }) : h('div', { 'class': 'muted', text: 'Nothing available: receive honey first, or close a batch.' }),
+      h('div', { 'class': 'actions' }, btn('btn-batch', 'Start batch', 'Saving...', '', null, 'submit'), cancel())));
+  }
+  if (!D.batches.length) out.push(h('div', { 'class': 'card muted', text: 'No batches yet.' }));
+  D.batches.forEach(function (b) {
+    out.push(h('div', { 'class': 'card batch', 'data-ref': b.batch_ref }, h('div', { 'class': 'row' },
+      h('div', {}, h('div', { 'class': 'name', text: (b.product_name || label([['processing', 'Processing'], ['blend', 'Blend'], ['split', 'Split']], b.batch_type)) }),
+        h('span', { 'class': 'ref', text: b.batch_ref + ' ' }), h('span', { 'class': 'badge ' + (b.status === 'closed' ? 'ok' : 'wait'), text: b.status === 'closed' ? 'Closed' : 'Open' }),
+        h('div', { 'class': 'muted', text: b.status === 'closed' ? kg(b.input_kg) + ' in, ' + kg(b.output_kg) + ' out, ' + kg(r3(b.output_kg - b.consumed_kg)) + ' left' : kg(b.input_kg) + ' in - not yet closed' })),
+      h('button', { 'class': 'sec small act-open', text: 'Open', onclick: function () { openBatch(b.id); } }))));
+  });
+  return out;
+}
+function openBatch(id) {
+  S.tab = 'batches'; S.open = { kind: 'batch', id: id }; S.detail = null; S.codes = null; S.form = null; S.flash = null; render();
+  loadBatch(id).then(function () { render(); }, function (e) { fail(e, true); });
+}
+function qrSvg(text) {
+  var q = qrcode(0, 'M'); q.addData(text); q.make();
+  var n = q.getModuleCount(), pad = 4, size = n + pad * 2, NS = 'http://www.w3.org/2000/svg', d = '', r, c;
+  for (r = 0; r < n; r++) for (c = 0; c < n; c++) if (q.isDark(r, c)) d += 'M' + (c + pad) + ' ' + (r + pad) + 'h1v1h-1z';
+  var svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 ' + size + ' ' + size); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'QR code'); svg.setAttribute('shape-rendering', 'crispEdges');
+  var bg = document.createElementNS(NS, 'rect'); bg.setAttribute('width', size); bg.setAttribute('height', size); bg.setAttribute('fill', '#fff');
+  var p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); p.setAttribute('fill', '#000');
+  svg.appendChild(bg); svg.appendChild(p); return svg;
+}
+function passportUrl(token) { return new URL('../trace/', location.href).href + '?h=' + token; }
+function label2(name, run, code, token) {
+  var url = passportUrl(token);
+  return h('div', { 'class': 'qrlabel', 'data-url': url, 'data-code': code || '' }, qrSvg(url), h('div', { 'class': 'lbl-name', text: name }),
+    h('div', { 'class': 'ref', text: code || run.pack_ref + ' (batch passport)' }), h('div', { 'class': 'lbl-small', text: 'Scan to see where this honey came from' }),
+    S.cfg.env !== 'production' ? h('div', { 'class': 'lbl-small', text: String(S.cfg.env || 'test').toUpperCase() + ' - not a real product code' }) : null);
+}
+function viewCodes(b) {
+  var c = S.codes, name = b.product_name || 'Honey';
+  return h('div', { 'class': 'card', id: 'codes' }, h('div', { 'class': 'row noprint' }, h('h3', { text: 'QR labels - ' + c.pack_ref }),
+      h('button', { type: 'button', id: 'btn-print', text: 'Print all', onclick: function () { document.body.classList.add('print-labels'); window.print(); document.body.classList.remove('print-labels'); } })),
+    h('p', { 'class': 'muted noprint', text: 'One label per jar, plus one batch passport label for the carton. Each jar code is unique.' }),
+    h('div', { 'class': 'labels', id: 'labels' }, label2(name, c.run, null, c.passport_token), (c.packages || []).map(function (k) { return label2(name, c.run, k.package_code, k.token); })));
+}
+function viewBatch() {
+  var b = batchById(S.open.id), D = S.d;
+  var back = h('button', { 'class': 'sec small', id: 'btn-back', text: 'Back to batches', onclick: function () { go('batches'); } });
+  if (!b) return [back, flash(), h('div', { 'class': 'card muted', text: 'Batch not found.' })];
+  var closed = b.status === 'closed', left = closed ? r3(b.output_kg - b.consumed_kg) : 0, runs = D.runs.filter(function (r) { return r.batch_id === b.id; });
+  var out = [back, h('h2', { text: (b.product_name || 'Honey batch') + ' - ' + b.batch_ref }), flash(),
+    h('div', { 'class': 'card', id: 'batch-summary' }, h('span', { 'class': 'badge ' + (closed ? 'ok' : 'wait'), text: closed ? 'Closed' : 'Open' }),
+      h('span', { 'class': 'badge', text: b.batch_type }),
+      h('div', { text: 'Went in: ' + kg(b.input_kg) }), closed ? h('div', { text: 'Came out: ' + kg(b.output_kg) + ' - lost: ' + kg(b.loss_kg) }) : null,
+      closed ? h('div', { 'class': 'big-num', id: 'left', text: kg(left) + ' not yet packed or used' }) : null)];
+  if (!S.detail || S.detail.id !== b.id) return out.concat(h('div', { 'class': 'card muted', text: 'Loading...' }));
+  var tr = S.detail.trace || {};
+  out.push(h('div', { 'class': 'card', id: 'genealogy' }, h('h3', { text: 'Where the honey came from' }),
+    (tr.harvests || []).map(function (x) {
+      return h('div', { 'class': 'item' }, h('strong', { text: label(CLASSES, x.honey_class) + ' - ' + kg(x.kg_in_batch || x.kg) + ' ' }), h('span', { 'class': 'ref', text: x.harvest_ref }),
+        h('div', { 'class': 'muted', text: [x.producer, x.producer_group, x.community, x.harvest_date].filter(Boolean).join(' - ') }), h('div', {}, verifBadges(x)));
+    }),
+    (tr.lineage || []).length > 1 ? h('div', { 'class': 'muted', text: 'Made from: ' + tr.lineage.map(function (l) { return l.batch_ref; }).join(' <- ') }) : null));
+  out.push(h('div', { 'class': 'card', id: 'steps' }, h('div', { 'class': 'row' }, h('h3', { text: 'Processing' }), !closed && canWrite() ? toggle('step', 'Add step') : null),
+    S.detail.steps.length ? S.detail.steps.map(function (s) {
+      return h('div', { 'class': 'item' }, h('strong', { text: label(STEPS, s.step) }), h('div', { 'class': 'muted', text: when(s.started_at) + ' - ' + s.operator + (s.equipment ? ' - ' + s.equipment : '') + (s.loss_kg != null ? ' - loss ' + kg(s.loss_kg) : '') + (s.step_note ? ' - ' + s.step_note : '') }));
+    }) : h('div', { 'class': 'muted', text: 'No steps recorded.' }),
+    S.form === 'step' ? h('form', { id: 'form-step', onsubmit: function (e) { doStep(e, b); } },
+      h('div', { 'class': 'grid2' }, h('div', {}, field('Step', sel('st-step', STEPS, 'extraction'))), h('div', {}, field('Done by', input('st-op')))),
+      h('div', { 'class': 'grid2' }, h('div', {}, field('Started', input('st-start', { type: 'datetime-local', value: nowLocal() }))), h('div', {}, field('Finished (optional)', input('st-end', { type: 'datetime-local' })))),
+      h('div', { 'class': 'grid2' }, h('div', {}, field('Equipment (optional)', input('st-eq'))), h('div', {}, field('Loss at this step, kg (optional)', input('st-loss', { inputmode: 'decimal' })))),
+      field('Note (optional)', input('st-note')), h('div', { 'class': 'actions' }, btn('btn-step', 'Save step', 'Saving...', '', null, 'submit'), cancel())) : null,
+    !closed && canWrite() ? h('div', { 'class': 'actions' }, toggle('close', 'Close batch')) : null,
+    S.form === 'close' ? h('form', { id: 'form-close', onsubmit: function (e) { doCloseBatch(e, b); } },
+      field('Weight of honey that came out, kg (up to ' + b.input_kg + ')', input('cl-out', { inputmode: 'decimal' })),
+      h('p', { 'class': 'muted', text: 'Loss is worked out as what went in minus what came out.' }),
+      h('div', { 'class': 'actions' }, btn('btn-close', 'Close batch', 'Saving...', '', null, 'submit'), cancel())) : null));
+  out.push(h('div', { 'class': 'card', id: 'tests' }, h('div', { 'class': 'row' }, h('h3', { text: 'Test results' }), role(['clerk', 'org_admin', 'verifier']) ? toggle('test', 'Add result') : null),
+    h('p', { 'class': 'muted', text: 'Results are shown exactly as entered, with who tested and the certificate. HoneyTrace makes no pass, grade or certification claim.' }),
+    S.detail.tests.length ? S.detail.tests.map(function (t) {
+      return h('div', { 'class': 'item test' }, h('strong', { text: label(TESTS, t.test_type) + ': ' + (t.result_value != null ? t.result_value + ' ' + (t.unit || '') : t.result_text) }),
+        h('div', { 'class': 'muted', text: [t.tested_at, t.tested_by, t.laboratory, t.method, t.certificate_ref ? 'certificate ' + t.certificate_ref : null].filter(Boolean).join(' - ') }),
+        t.document_path ? h('button', { type: 'button', 'class': 'sec small', text: 'Open document', onclick: function () { openDoc(t.document_path); } }) : null);
+    }) : h('div', { 'class': 'muted', text: 'No results recorded.' }),
+    S.form === 'test' ? h('form', { id: 'form-test', onsubmit: function (e) { doTest(e, b); } },
+      h('div', { 'class': 'grid2' }, h('div', {}, field('Test', sel('ts-type', TESTS, 'moisture'))), h('div', {}, field('Result (number)', input('ts-value', { inputmode: 'decimal' })))),
+      h('div', { 'class': 'grid2' }, h('div', {}, field('Unit', input('ts-unit', { placeholder: '% for moisture' }))), h('div', {}, field('Or result in words', input('ts-text')))),
+      h('div', { 'class': 'grid2' }, h('div', {}, field('Tested by', input('ts-by'))), h('div', {}, field('Date tested', input('ts-date', { type: 'date', value: today(), max: today() })))),
+      h('div', { 'class': 'grid2' }, h('div', {}, field('Laboratory (optional)', input('ts-lab'))), h('div', {}, field('Method or instrument (optional)', input('ts-method', { placeholder: 'For example: refractometer' })))),
+      field('Certificate number (optional)', input('ts-cert')), field('Certificate or report file (optional, PDF/JPG/PNG, max 10 MB)', input('ts-file', { type: 'file', accept: 'application/pdf,image/jpeg,image/png' })),
+      field('Note (optional)', input('ts-note')), h('div', { 'class': 'actions' }, btn('btn-test', 'Save result', 'Saving...', '', null, 'submit'), cancel())) : null));
+  if (closed) {
+    var mats = D.materials.filter(function (m) { return m.status !== 'inactive'; });
+    out.push(h('div', { 'class': 'card', id: 'packing' }, h('div', { 'class': 'row' }, h('h3', { text: 'Packing' }), canWrite() && left > 0 ? toggle('pack', 'Pack into jars') : null),
+      runs.length ? runs.map(function (r) {
+        var m = D.materials.filter(function (x) { return x.id === r.material_id; })[0] || {}, pk = D.packages.filter(function (k) { return k.run_id === r.id; });
+        return h('div', { 'class': 'item run', 'data-ref': r.pack_ref }, h('strong', { text: r.units + ' x ' + (m.name || r.net_g + ' g') + ' - ' + kg(r.total_kg) + ' ' }), h('span', { 'class': 'ref', text: r.pack_ref }),
+          h('div', { 'class': 'muted', text: 'Packed ' + when(r.packed_at) + (r.best_before ? ' - best before ' + r.best_before : '') + ' - in stock ' + pk.filter(function (k) { return k.status === 'in_stock'; }).length + ', sent ' + pk.filter(function (k) { return k.status === 'dispatched'; }).length }),
+          canWrite() ? h('button', { type: 'button', 'class': 'sec small act-codes', text: 'QR labels', onclick: function () { showCodes(r); } }) : null);
+      }) : h('div', { 'class': 'muted', text: 'Not packed yet.' }),
+      S.form === 'pack' ? h('form', { id: 'form-pack', onsubmit: function (e) { doPack(e, b); } },
+        mats.length ? field('Package', sel('pk-mat', mats.map(function (m) { return [m.id, m.name + ' (' + m.net_g + ' g)']; }), mats[0].id)) : h('div', { 'class': 'muted', text: 'No package types yet - add one below.' }),
+        h('div', { 'class': 'grid2' }, h('div', {}, field('How many', input('pk-units', { inputmode: 'numeric' }))), h('div', {}, field('Best before (optional)', input('pk-bb', { type: 'date' })))),
+        field('Packed at', input('pk-at', { type: 'datetime-local', value: nowLocal() })),
+        h('div', { 'class': 'actions' }, btn('btn-pack', 'Pack and make QR codes', 'Saving...', '', null, 'submit'), cancel(), toggle('material', 'New package type'))) : null,
+      S.form === 'material' ? h('form', { id: 'form-material', onsubmit: doMaterial },
+        field('Name', input('mt-name', { placeholder: '250 g glass jar' })),
+        h('div', { 'class': 'grid2' }, h('div', {}, field('Kind', sel('mt-kind', KINDS, 'jar'))), h('div', {}, field('Material', sel('mt-mat', MATERIALS, 'glass')))),
+        field('Net honey per package, grams', input('mt-g', { inputmode: 'numeric' })),
+        h('div', { 'class': 'actions' }, btn('btn-material', 'Add package type', 'Saving...', '', null, 'submit'), cancel())) : null));
+    if (S.codes && runs.some(function (r) { return r.id === S.codes.run.id; })) out.push(viewCodes(b));
+  }
+  if (isAdmin()) out.push(h('div', { 'class': 'card', id: 'recall-box' }, h('div', { 'class': 'row' }, h('h3', { text: 'Recall' }), toggle('recall', 'Recall this batch', 'danger')),
+    h('p', { 'class': 'muted', text: 'A recall covers every jar packed from this batch and from any batch made from it. Their QR pages show your notice at once.' }),
+    S.form === 'recall' ? h('form', { id: 'form-recall', onsubmit: function (e) { doRecall(e, { batch: b.id }); } },
+      field('Reason (internal)', h('textarea', { id: 'rc-reason', rows: 2 })), field('Notice customers will see on the QR page', h('textarea', { id: 'rc-notice', rows: 2 })),
+      h('div', { 'class': 'actions' }, btn('btn-recall', 'Open recall', 'Saving...', 'danger', null, 'submit'), cancel())) : null));
+  return out;
+}
+// ---- stock (buyer)
+function viewStock() {
+  var D = S.d, R = D.recon || {}, pk = R.packages || {}, out = [h('h2', { text: 'Stock, orders and recalls' }), flash()];
+  out.push(h('div', { 'class': 'card', id: 'recon' }, h('h3', { text: 'Reconciliation' }),
+    h('div', { text: 'Received ' + kg((R.intakes || {}).received_kg || 0) + ' - in batches ' + kg((R.intakes || {}).in_batches_kg || 0) + ' - not yet processed ' + kg((R.intakes || {}).not_yet_processed_kg || 0) }),
+    h('div', { text: 'Batches: in ' + kg((R.batches || {}).input_kg || 0) + ', out ' + kg((R.batches || {}).output_kg || 0) + ', lost ' + kg((R.batches || {}).loss_kg || 0) }),
+    h('div', { text: 'Packages: ' + (pk.packed || 0) + ' packed (' + kg(pk.packed_kg || 0) + ') - ' + (pk.in_stock || 0) + ' in stock - ' + (pk.dispatched || 0) + ' sent - ' + (pk.written_off || 0) + ' written off' }),
+    h('div', { text: 'Returns: ' + (R.returns || 0) + ' - open recalls: ' + (R.open_recalls || 0) }),
+    ((R.intakes || {}).lines_mismatch || (R.batches || {}).unbalanced || (R.batches || {}).inputs_mismatch) ? h('div', { 'class': 'msg err', id: 'recon-bad', text: 'Figures do not add up - report this to the platform administrator.' })
+      : h('div', { 'class': 'badge ok', id: 'recon-ok', text: 'All figures add up' })));
+  out.push(h('div', { 'class': 'card' }, h('div', { 'class': 'row' }, h('h3', { text: 'Send out (order)' }), canWrite() ? toggle('dispatch', 'Send packages') : null),
+    S.form === 'dispatch' ? h('form', { id: 'form-dispatch', onsubmit: doDispatch },
+      field('Package codes - scan each jar or type the codes, one per line', h('textarea', { id: 'ds-codes', rows: 4, placeholder: 'HPK-261120-000001-0001' })),
+      h('div', { 'class': 'grid2' }, h('div', {}, field('Going to', sel('ds-type', DEST, 'own_shop'))), h('div', {}, field('Name of the place or customer', input('ds-name')))),
+      field('Order or invoice number (optional)', input('ds-order')),
+      h('div', { 'class': 'actions' }, btn('btn-dispatch', 'Record order', 'Saving...', '', null, 'submit'), cancel())) : null,
+    D.dispatches.slice(0, 20).map(function (d) { return h('div', { 'class': 'item' }, h('span', { 'class': 'ref', text: d.dispatch_ref + ' ' }), d.destination_name + ' - ' + label(DEST, d.destination_type) + (d.order_ref ? ' - order ' + d.order_ref : '') + ' - ' + when(d.dispatched_at)); })));
+  out.push(h('div', { 'class': 'card' }, h('div', { 'class': 'row' }, h('h3', { text: 'Returns' }), canWrite() ? toggle('return', 'Record a return') : null),
+    S.form === 'return' ? h('form', { id: 'form-return', onsubmit: doReturn }, field('Package code', input('rt-code')), field('Reason', input('rt-reason')),
+      field('What happens to it', sel('rt-out', [['restocked', 'Back into stock'], ['written_off', 'Written off']], 'restocked')),
+      h('div', { 'class': 'actions' }, btn('btn-return', 'Record return', 'Saving...', '', null, 'submit'), cancel())) : null));
+  out.push(h('div', { 'class': 'card', id: 'recalls' }, h('h3', { text: 'Recalls' }),
+    D.recalls.length ? D.recalls.map(function (rc) {
+      var b = batchById(rc.batch_id), r = D.runs.filter(function (x) { return x.id === rc.run_id; })[0];
+      return h('div', { 'class': 'item recall', 'data-ref': rc.recall_ref }, h('span', { 'class': 'badge ' + (rc.status === 'open' ? 'bad' : ''), text: rc.status === 'open' ? 'Open' : 'Closed' }),
+        h('strong', { text: rc.recall_ref + ' - ' + (b ? b.batch_ref : r ? r.pack_ref : '') }), h('div', { 'class': 'muted', text: rc.reason }), h('div', { 'class': 'muted', text: 'Public notice: ' + rc.public_notice }),
+        h('div', { 'class': 'actions' }, h('button', { type: 'button', 'class': 'sec small', text: 'Where are the jars?', onclick: function () { showRecall(rc); } }),
+          rc.status === 'open' && isAdmin() ? toggle('rclose-' + rc.id, 'Close recall') : null),
+        S.form === 'rclose-' + rc.id ? h('form', { id: 'form-rclose', onsubmit: function (e) { doCloseRecall(e, rc); } }, field('How was it resolved?', input('rcc-note')),
+          h('div', { 'class': 'actions' }, btn('btn-rclose', 'Close recall', 'Saving...', '', null, 'submit'), cancel())) : null,
+        S.recallReport && S.recallReport.id === rc.id ? h('div', { 'class': 'sub', id: 'recall-report' }, S.recallReport.packages.map(function (k) {
+          return h('div', { 'class': 'muted', text: k.package_code + ' - ' + k.status.replace('_', ' ') + (k.destination ? ' - ' + k.destination + (k.order_ref ? ' (order ' + k.order_ref + ')' : '') : '') });
+        })) : null);
+    }) : h('div', { 'class': 'muted', text: 'No recalls.' })));
+  return out;
+}
+// ---- dashboard
+function bars(rows, keyText, keyVal, unit) {
+  var max = Math.max.apply(null, rows.map(function (r) { return Number(r[keyVal]) || 0; }).concat([1]));
+  return rows.map(function (r) {
+    return h('div', { 'class': 'bar' }, h('div', { 'class': 'bar-l', text: keyText(r) }),
+      h('div', { 'class': 'bar-t' }, h('div', { 'class': 'bar-f', style: 'width:' + Math.round(100 * (Number(r[keyVal]) || 0) / max) + '%' })), h('div', { 'class': 'bar-v', text: (Number(r[keyVal]) || 0) + (unit || '') }));
+  });
+}
+function viewDash() {
+  var d = S.dash || {}, x = d.data, out = [h('h2', { text: 'Dashboard' }), flash(),
+    h('div', { 'class': 'card' }, h('div', { 'class': 'grid2' }, h('div', {}, field('From', input('dash-from', { type: 'date', value: d.from }))), h('div', {}, field('To', input('dash-to', { type: 'date', value: d.to })))),
+      h('div', { 'class': 'pickrow', style: 'margin-top:10px' }, h('input', { type: 'checkbox', id: 'dash-demo', checked: d.demo }), h('label', { 'for': 'dash-demo', style: 'margin:0', text: 'Include demonstration data' })),
+      h('div', { 'class': 'actions' }, h('button', { type: 'button', id: 'btn-dash', text: 'Show', onclick: loadDash })))];
+  if (!x) return out.concat(h('div', { 'class': 'card muted', text: 'Loading...' }));
+  var cls = Object.keys(x.by_class || {}).map(function (k) { return { k: k, v: x.by_class[k] }; }), p = x.participation || {}, pr = x.processing || {};
+  out.push(h('div', { 'class': 'msg info', text: x.basis }));
+  out.push(h('div', { 'class': 'card', id: 'dash-class' }, h('h3', { text: 'Mangrove and terrestrial honey harvested' }), cls.length ? bars(cls, function (r) { return label(CLASSES, r.k); }, 'v', ' kg') : h('div', { 'class': 'muted', text: 'Nothing in this period.' })));
+  out.push(h('div', { 'class': 'card', id: 'dash-community' }, h('h3', { text: 'By community' }), (x.by_community || []).length ? bars(x.by_community, function (r) { return r.community + ' - ' + label(CLASSES, r.honey_class); }, 'harvested_kg', ' kg') : h('div', { 'class': 'muted', text: 'Nothing in this period.' })));
+  out.push(h('div', { 'class': 'card', id: 'dash-month' }, h('h3', { text: 'By month (season)' }), (x.by_month || []).length ? bars(x.by_month, function (r) { return r.month + ' - ' + label(CLASSES, r.honey_class); }, 'harvested_kg', ' kg') : h('div', { 'class': 'muted', text: 'Nothing in this period.' })));
+  out.push(h('div', { 'class': 'card', id: 'dash-people' }, h('h3', { text: 'Participation' }),
+    h('div', { text: (p.registered_producers || 0) + ' beekeepers registered, ' + (p.producers_who_harvested || 0) + ' harvested in this period' }),
+    h('div', { text: (p.apiaries || 0) + ' apiaries, ' + (p.hives || 0) + ' hives' })));
+  out.push(h('div', { 'class': 'card', id: 'dash-yield' }, h('h3', { text: 'Processing yield' }),
+    h('div', { text: (pr.batches_closed || 0) + ' batches: ' + kg(pr.input_kg || 0) + ' in, ' + kg(pr.output_kg || 0) + ' out' + (pr.yield_pct != null ? ' (' + pr.yield_pct + '% yield)' : '') })));
+  out.push(h('div', { 'class': 'card', id: 'dash-pack' }, h('h3', { text: 'Packaging and sales' }),
+    (x.packaging || []).map(function (r) { return h('div', { text: r.package + ': ' + r.units + ' units, ' + kg(r.kg) }); }),
+    (x.distribution || []).map(function (r) { return h('div', { text: label(DEST, r.destination_type) + ': ' + r.packages + ' packages in ' + r.dispatches + ' orders' }); }),
+    h('div', { 'class': 'muted', text: 'Returns ' + (x.returns || 0) + ' - recalls ' + (x.recalls || 0) })));
+  return out;
+}
+function render() {
+  var v = $('#view'), u = $('#hdr-user');
+  clear(v); clear(u);
+  $('#hdr-title').textContent = 'HoneyTrace' + (S.cfg && S.cfg.env !== 'production' ? ' - ' + String(S.cfg.env || 'test').toUpperCase() : '');
+  if (!S.session) { $('#hdr-sub').textContent = 'Honey traceability'; add(v, viewLogin()); return; }
+  add(u, h('button', { id: 'btn-signout', text: 'Sign out', onclick: doSignOut }));
+  var m = me(); $('#hdr-sub').textContent = m ? m.organization : 'Honey traceability';
+  if (S.loading && !S.ctx) { add(v, h('div', { 'class': 'card muted', text: 'Loading...' })); return; }
+  if (!S.org) { add(v, [flash(), h('div', { 'class': 'msg info', id: 'no-role', text: 'This account is not a member of a beekeepers\' group or a honey buyer, so there is nothing to record here.' })]); return; }
+  add(v, [orgPicker(), S.open ? null : tabs()]);
+  if (S.loading) { add(v, h('div', { 'class': 'card muted', text: 'Loading...' })); return; }
+  var t = S.tab;
+  add(v, S.open ? viewBatch() : t === 'producers' ? viewProducers() : t === 'harvests' ? viewHarvests() : t === 'intake' ? viewIntake()
+       : t === 'batches' ? viewBatches() : t === 'stock' ? viewStock() : viewDash());
+}
+function viewLogin() {
+  return [h('h2', { text: 'Sign in' }), flash(),
+    h('form', { 'class': 'card', id: 'login', onsubmit: doSignIn },
+      field('Email', h('input', { id: 'email', type: 'email', autocomplete: 'username', required: true })),
+      field('Password', h('input', { id: 'password', type: 'password', autocomplete: 'current-password', required: true })),
+      h('div', { 'class': 'actions' }, h('button', { type: 'submit', id: 'login-go', 'class': 'big', 'data-label': 'Sign in', 'data-busy': 'Signing in...', disabled: S.busy, text: S.busy ? 'Signing in...' : 'Sign in' })))];
+}
+
+// ------------------------------------------------------------------ boot
+fetch('config.json', { cache: 'no-cache' }).then(function (r) { return r.json(); }).then(function (c) {
+  S.cfg = c;
+  try { S.session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch (e) { S.session = null; }
+  if (!S.session) return render();
+  return start();
+}).catch(function () { add($('#view'), h('div', { 'class': 'msg err', text: 'The page could not start. Check the connection and open it again.' })); });
+window.__cth = { S: S };   // read-only handle used by the automated tests
+
+})();
+</script>
+</body>
+</html>

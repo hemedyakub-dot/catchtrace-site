@@ -176,21 +176,80 @@ function render(d) {
   }
   show(h);
 }
-var m = /[?&#]t=([0-9a-fA-F]{32})(?:[&#]|$)/.exec(location.search + location.hash);
-if (!m) { notFound(); return; }
-fetch('config.json', { cache: 'no-cache' }).then(function (r) { return r.json(); }).then(function (cfg) {
-  if (cfg.env && cfg.env !== 'production') document.getElementById('env').textContent = String(cfg.env).toUpperCase() + ' - not the live system';
-  return fetch(cfg.url + '/rest/v1/rpc/public_trace', { method: 'POST',
-    headers: { apikey: cfg.key, 'Content-Type': 'application/json', 'Content-Profile': 'catchtrace' },
-    body: JSON.stringify({ p_token: m[1].toLowerCase() }) });
-}).then(function (r) {
-  if (r.ok) return r.json();
-  // Over the request limit the service answers 429 (database code PT429).
-  return r.json().then(function (j) { return j; }, function () { return null; }).then(function (j) {
-    if (r.status === 429 || (j && j.code === 'PT429')) return { busy: true };
-    throw new Error('http ' + r.status);
+// ---- honey passport (HoneyTrace): codes printed on honey jars carry ?h=
+var HCLASS = { mangrove: 'Mangrove honey', terrestrial: 'Terrestrial (woodland) honey', other: 'Honey', blend: 'Blended honey' };
+var HHAB = { mangrove: 'mangrove', terrestrial_woodland: 'terrestrial woodland', other: 'other habitat' };
+var HSTEP = { extraction: 'Extracted', filtration: 'Filtered', settling: 'Settled', warming: 'Warmed', decrystallising: 'Decrystallised', other: 'Other step' };
+var HTEST = { moisture: 'Moisture', hmf: 'HMF', diastase: 'Diastase', sugars: 'Sugars', pollen: 'Pollen', residues: 'Residues', other: 'Test' };
+var HBT = { processing: 'Processed', blend: 'Blended', split: 'Divided from a larger batch' };
+function period(p) { if (!p || !p.from) return ''; return p.from === p.to ? day(p.from) : day(p.from) + ' to ' + day(p.to); }
+function renderHoney(d) {
+  var g = d.packaging || {}, pk = g.package || {}, h = '';
+  document.querySelector('header .t').textContent = 'HoneyTrace';
+  document.querySelector('footer').textContent = 'This page shows what was recorded on HoneyTrace for this honey. It never shows beekeepers\' contacts, exact apiary positions or prices. Beekeepers are named only with their agreement. Test results are shown as reported; HoneyTrace does not grade or certify honey.';
+  if (d.demonstration_data) h += '<div class="demo" id="demo">Demonstration record. This is test data, not real honey.</div>';
+  if (d.recall) h += '<div class="demo" id="recall" style="background:#fbdada;color:#7c1515;border-color:#d99">' + (d.recall.status === 'open' ? 'RECALL' : 'Recall (closed)') + ' ' + esc(d.recall.recall_ref) + ': ' + esc(d.recall.notice) + '</div>';
+  if (d.package_status === 'withdrawn') h += '<div class="demo" id="withdrawn">This jar has been withdrawn from sale.</div>';
+  h += '<div class="card"><h1 id="product">' + esc(HCLASS[d.honey_type] || 'Honey') + '</h1>';
+  if (d.honey_type === 'blend') h += '<div class="muted" id="composition">' + (d.composition || []).map(function (c) { return esc(c.share_pct) + '% ' + esc((HCLASS[c.honey_class] || c.honey_class).toLowerCase()); }).join(', ') + '</div>';
+  h += '<dl style="margin-top:12px">' + (d.package_code ? '<dt>Jar</dt><dd class="ref" id="package-code">' + esc(d.package_code) + '</dd>' : '') +
+    '<dt>Packing batch</dt><dd class="ref" id="pack-ref">' + esc(g.pack_ref) + '</dd>' +
+    (pk.net_g ? '<dt>Pack</dt><dd>' + esc(pk.net_g) + ' g ' + esc(pk.material || '') + ' ' + esc(String(pk.kind || '').replace('_', ' ')) + '</dd>' : '') +
+    (g.packed_by ? '<dt>Packed by</dt><dd>' + esc(g.packed_by) + '</dd>' : '') + (g.packed_on ? '<dt>Packed on</dt><dd>' + esc(day(g.packed_on)) + '</dd>' : '') +
+    (g.best_before ? '<dt>Best before</dt><dd>' + esc(day(g.best_before)) + '</dd>' : '') +
+    (d.harvest_period && d.harvest_period.from ? '<dt>Harvested</dt><dd id="harvest-period">' + esc(period(d.harvest_period)) + '</dd>' : '') + '</dl></div>';
+  h += '<h2 id="origin-h">Where it was harvested</h2>';
+  (d.origins || []).forEach(function (o) {
+    var n = o.harvests, cv = o.community_verified, dv = o.document_verified;
+    h += '<div class="card origin"><strong>' + esc(HCLASS[o.honey_class] || 'Honey') + '</strong>' +
+      '<dl style="margin-top:10px"><dt>Community</dt><dd class="community">' + esc(o.community) + (o.county ? ', ' + esc(o.county) + ' County' : '') + '</dd>' +
+      '<dt>Habitat</dt><dd>' + esc(HHAB[o.habitat] || o.habitat) + '</dd>' +
+      '<dt>Beekeepers</dt><dd>' + esc(o.producer_group) + (o.producer ? ' - ' + esc(o.producer) : '') + '</dd>' +
+      '<dt>Harvested</dt><dd>' + esc(period(o)) + ' (' + n + (n === 1 ? ' harvest' : ' harvests') + ')</dd>' +
+      '<dt>Checked</dt><dd><span class="badge ' + (o.disputed ? 'bad' : (cv || dv) ? 'ok' : '') + '">' + (o.disputed ? 'Under review' : (cv || dv) ? 'Verified' : 'Not yet verified') + '</span>' +
+      '<ul class="checks">' + mark(cv === n, 'confirmed by the beekeepers\' community (' + cv + ' of ' + n + ')') + mark(dv === n, 'checked against a document (' + dv + ' of ' + n + ')') + '</ul></dd></dl></div>';
   });
-}).then(function (d) { if (d && d.busy) busy(); else if (d && d.found) render(d); else notFound(); }, unavailable);
+  if ((d.processing || []).length || (d.batches || []).length) {
+    h += '<h2>What happened to it</h2><div class="card"><ol class="steps">';
+    (d.processing || []).forEach(function (s) { h += '<li>' + esc(HSTEP[s.step] || s.step) + (s.step_note ? ': ' + esc(s.step_note) : '') + (s.on ? ' - ' + esc(day(s.on)) : '') + ' <span class="ref muted">' + esc(s.batch_ref) + '</span></li>'; });
+    (d.batches || []).slice().reverse().forEach(function (b) { if (b.batch_type !== 'processing') h += '<li>' + esc(HBT[b.batch_type] || b.batch_type) + (b.closed_on ? ' - ' + esc(day(b.closed_on)) : '') + ' <span class="ref muted">' + esc(b.batch_ref) + '</span></li>'; });
+    h += '</ol></div>';
+  }
+  h += '<h2 id="tests-h">Test results</h2>';
+  if (!(d.quality_tests || []).length) h += '<div class="card muted" id="no-tests">No test results are on file for this honey.</div>';
+  (d.quality_tests || []).forEach(function (t) {
+    h += '<div class="card test"><strong>' + esc(HTEST[t.test] || t.test) + ': ' + esc(t.value != null ? t.value + ' ' + (t.unit || '') : t.result_text) + '</strong>' +
+      '<div class="muted">' + [t.tested_on ? 'Tested ' + day(t.tested_on) : '', t.laboratory, t.method, t.certificate_ref ? 'certificate ' + t.certificate_ref : '', t.document_on_file ? 'report on file' : ''].filter(Boolean).map(esc).join(' - ') + '</div></div>';
+  });
+  show(h);
+}
+var hm = /[?&#]h=([0-9a-fA-F]{32})(?:[&#]|$)/.exec(location.search + location.hash);
+var m = hm || /[?&#]t=([0-9a-fA-F]{32})(?:[&#]|$)/.exec(location.search + location.hash);
+if (!m) { notFound(); return; }
+var cfg;
+function lookup(fn) {
+  return fetch(cfg.url + '/rest/v1/rpc/' + fn, { method: 'POST',
+    headers: { apikey: cfg.key, 'Content-Type': 'application/json', 'Content-Profile': 'catchtrace' },
+    body: JSON.stringify({ p_token: m[1].toLowerCase() }) }).then(function (r) {
+    if (r.ok) return r.json();
+    // Over the request limit the service answers 429 (database code PT429).
+    return r.json().then(function (j) { return j; }, function () { return null; }).then(function (j) {
+      if (r.status === 429 || (j && j.code === 'PT429')) return { busy: true };
+      throw new Error('http ' + r.status);
+    });
+  });
+}
+fetch('config.json', { cache: 'no-cache' }).then(function (r) { return r.json(); }).then(function (c) {
+  cfg = c;
+  if (cfg.env && cfg.env !== 'production') document.getElementById('env').textContent = String(cfg.env).toUpperCase() + ' - not the live system';
+  if (hm) return lookup('honey_passport').then(function (d) { return [d, true]; });
+  // A honey jar code reached through a fish link (?t=, as the shop pages make
+  // them) is still found: look in HoneyTrace when the fish lookup has nothing.
+  return lookup('public_trace').then(function (d) {
+    if (d && (d.busy || d.found)) return [d, false];
+    return lookup('honey_passport').then(function (d2) { return [d2, true]; });
+  });
+}).then(function (x) { var d = x[0]; if (d && d.busy) busy(); else if (d && d.found) (x[1] ? renderHoney : render)(d); else notFound(); }, unavailable);
 })();
 </script>
 </body>
