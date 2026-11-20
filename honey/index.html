@@ -307,9 +307,43 @@ function loadBatch(id) {
     rpc('honey_trace_batch', { p_batch_id: id })
   ]).then(function (r) { S.detail = { id: id, steps: r[0] || [], tests: r[1] || [], trace: r[2] || {} }; });
 }
+// Two-step sign-in: when the code is switched on, HoneyTrace opens only after
+// the 6-digit code emailed to this account is entered (once per sign-in, 12 h).
 function start() {
   S.loading = true; render();
-  return loadBase().then(loadOrg).then(function () { S.loading = false; render(); }, function (e) { S.loading = false; fail(e, true); });
+  return rpc('login_code_status').then(function (st) {
+    S.codeStatus = st || {};
+    if (st && st.honey_code_required && !st.verified) { S.loading = false; return needCode(true); }
+    S.needCode = false;
+    return loadBase().then(loadOrg).then(function () { S.loading = false; render(); });
+  }).then(null, function (e) { S.loading = false; fail(e, true); });
+}
+function needCode(autoSend) {
+  S.needCode = true; S.busy = false; render();
+  if (autoSend && !S.codeSentAt) sendCode();
+}
+function sendCode() {
+  setFlash(null); setBusy(true);
+  return rpc('send_login_code').then(function (r) {
+    S.codeSentAt = Date.now(); S.codeSentTo = r && r.sent_to; S.busy = false; S.flash = ['ok', 'Code sent to ' + (S.codeSentTo || 'your email') + '. It works for 10 minutes.']; render();
+  }, function (e) { S.busy = false; if (e instanceof AuthErr) return fail(e); S.flash = ['err', e instanceof NetErr ? 'No connection. Try again.' : e.message]; render(); });
+}
+function doCode(ev) {
+  ev.preventDefault(); if (S.busy) return;
+  var c = val('code2').replace(/\s+/g, '');
+  if (!need(/^\d{6}$/.test(c), 'Enter the 6-digit code from the email.')) return;
+  setFlash(null); setBusy(true);
+  rpc('verify_login_code', { p_code: c }).then(function () { S.needCode = false; S.codeSentAt = null; S.flash = null; S.busy = false; return start(); },
+    function (e) { S.busy = false; if (e instanceof AuthErr) return fail(e); S.flash = ['err', e instanceof NetErr ? 'No connection. Try again.' : e.message]; render(); });
+}
+function viewCode() {
+  var to = S.codeSentTo || (S.codeStatus && S.codeStatus.email) || 'your email';
+  return [h('h2', { text: 'Enter your sign-in code' }), flash(),
+    h('form', { 'class': 'card', id: 'form-code2', onsubmit: doCode },
+      h('p', { text: 'For HoneyTrace, a 6-digit code is emailed to ' + to + ' after your password. Enter it here - it is needed once per sign-in on this device (12 hours).' }),
+      field('Code from the email', input('code2', { inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: '8' })),
+      h('div', { 'class': 'actions' }, btn('btn-code2', 'Open HoneyTrace', 'Checking...', 'big', null, 'submit')),
+      h('button', { type: 'button', 'class': 'sec', id: 'btn-code2-again', style: 'width:100%;margin-top:8px', text: 'Send a new code', onclick: function () { sendCode(); } }))];
 }
 function reload() { return loadOrg().then(function () { return S.open && S.open.kind === 'batch' ? loadBatch(S.open.id) : null; }); }
 
@@ -326,6 +360,7 @@ function setBusy(on) {
 }
 function fail(e, redraw) {
   S.busy = false;
+  if (e && e.code === '28CT0') { S.codeSentAt = null; return needCode(true); }   // code not entered yet, or its 12 hours are over
   if (e instanceof AuthErr) { saveSession(null); S.ctx = null; S.flash = ['err', 'Your sign-in has ended. Sign in again.']; return render(); }
   var text = e instanceof NetErr ? 'Connection problem. Press the button again - the same request is never saved twice.' : (e && e.message) || 'Something went wrong.';
   if (redraw) { S.flash = ['err', text]; return render(); }
@@ -354,7 +389,7 @@ function doSignIn(ev) {
   signIn($('#email').value, $('#password').value).then(afterSignIn,
     function (e) { setBusy(false); setFlash('err', e instanceof NetErr ? 'No connection. Try again.' : 'Sign-in failed. Check the email and password.'); });
 }
-function doSignOut() { saveSession(null); S.ctx = null; S.orgs = []; S.org = null; S.d = {}; S.tab = null; S.open = null; S.form = null; S.flash = null; render(); }
+function doSignOut() { saveSession(null); S.needCode = false; S.codeSentAt = null; S.ctx = null; S.orgs = []; S.org = null; S.d = {}; S.tab = null; S.open = null; S.form = null; S.flash = null; render(); }
 function go(tab) { S.tab = tab; S.open = null; S.form = null; S.detail = null; S.codes = null; S.found = null; S.intakeLines = []; S.picked = {}; S.recallReport = null; S.flash = null; render(); if (tab === 'dash') loadDash(); }
 
 // producers, apiaries, hives
@@ -992,6 +1027,7 @@ function render() {
   if (!S.session) { $('#hdr-sub').textContent = 'Honey traceability'; add(v, viewLogin()); return; }
   add(u, h('button', { id: 'btn-signout', text: 'Sign out', onclick: doSignOut }));
   var m = me(); $('#hdr-sub').textContent = m ? m.organization : 'Honey traceability';
+  if (S.needCode) { add(v, viewCode()); return; }
   if (S.loading && !S.ctx) { add(v, h('div', { 'class': 'card muted', text: 'Loading...' })); return; }
   if (!S.org) { add(v, [flash(), h('div', { 'class': 'msg info', id: 'no-role', text: 'This account is not yet a member of a beekeepers\' group or a honey buyer. In Administration, open the group (or the buyer) and give this account a role under People - then open this page again.' })]); return; }
   add(v, [orgPicker(), S.open ? null : tabs()]);
