@@ -64,6 +64,7 @@ button:disabled{opacity:.5;cursor:default}
 }
 body.honey-bg{background-color:#fbf3df;background-image:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='260' viewBox='0 0 320 260'><path d='M30 170 q40 -50 80 -20 t80 -30' fill='none' stroke='%23b07a12' stroke-opacity='.35' stroke-width='1.3' stroke-dasharray='3 5'/><g transform='translate(200 110) rotate(-18) scale(1.0)'><ellipse cx='-2' cy='-8' rx='6' ry='9' fill='%23ffffff' fill-opacity='.85' stroke='%2389a9b8' stroke-width='.8' transform='rotate(-25 -2 -8)'/><ellipse cx='5' cy='-7' rx='5' ry='8' fill='%23ffffff' fill-opacity='.85' stroke='%2389a9b8' stroke-width='.8' transform='rotate(20 5 -7)'/><ellipse cx='0' cy='0' rx='11' ry='7' fill='%23f2b01e'/><path d='M-4 -6.6v13.2M1 -7v14M6 -5.6v11.2' stroke='%233b2a10' stroke-width='2.2'/><circle cx='12' cy='0' r='4' fill='%233b2a10'/><path d='M-11 0l-4 0' stroke='%233b2a10' stroke-width='1.6' stroke-linecap='round'/><path d='M14 -3q4 -6 7 -5M14 3q4 6 7 5' fill='none' stroke='%233b2a10' stroke-width='.9'/></g><g transform='translate(60 40) rotate(25) scale(0.75)'><ellipse cx='-2' cy='-8' rx='6' ry='9' fill='%23ffffff' fill-opacity='.85' stroke='%2389a9b8' stroke-width='.8' transform='rotate(-25 -2 -8)'/><ellipse cx='5' cy='-7' rx='5' ry='8' fill='%23ffffff' fill-opacity='.85' stroke='%2389a9b8' stroke-width='.8' transform='rotate(20 5 -7)'/><ellipse cx='0' cy='0' rx='11' ry='7' fill='%23f2b01e'/><path d='M-4 -6.6v13.2M1 -7v14M6 -5.6v11.2' stroke='%233b2a10' stroke-width='2.2'/><circle cx='12' cy='0' r='4' fill='%233b2a10'/><path d='M-11 0l-4 0' stroke='%233b2a10' stroke-width='1.6' stroke-linecap='round'/><path d='M14 -3q4 -6 7 -5M14 3q4 6 7 5' fill='none' stroke='%233b2a10' stroke-width='.9'/></g><g transform='translate(270 220) rotate(-40) scale(0.6)'><ellipse cx='-2' cy='-8' rx='6' ry='9' fill='%23ffffff' fill-opacity='.85' stroke='%2389a9b8' stroke-width='.8' transform='rotate(-25 -2 -8)'/><ellipse cx='5' cy='-7' rx='5' ry='8' fill='%23ffffff' fill-opacity='.85' stroke='%2389a9b8' stroke-width='.8' transform='rotate(20 5 -7)'/><ellipse cx='0' cy='0' rx='11' ry='7' fill='%23f2b01e'/><path d='M-4 -6.6v13.2M1 -7v14M6 -5.6v11.2' stroke='%233b2a10' stroke-width='2.2'/><circle cx='12' cy='0' r='4' fill='%233b2a10'/><path d='M-11 0l-4 0' stroke='%233b2a10' stroke-width='1.6' stroke-linecap='round'/><path d='M14 -3q4 -6 7 -5M14 3q4 6 7 5' fill='none' stroke='%233b2a10' stroke-width='.9'/></g></svg>"),url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='31.18' height='54' viewBox='0 0 31.18 54'><path d='M0.00 -18.00L15.59 -9.00L15.59 9.00L0.00 18.00L-15.59 9.00L-15.59 -9.00ZM31.18 -18.00L46.77 -9.00L46.77 9.00L31.18 18.00L15.59 9.00L15.59 -9.00ZM0.00 36.00L15.59 45.00L15.59 63.00L0.00 72.00L-15.59 63.00L-15.59 45.00ZM31.18 36.00L46.77 45.00L46.77 63.00L31.18 72.00L15.59 63.00L15.59 45.00ZM15.59 9.00L31.18 18.00L31.18 36.00L15.59 45.00L-0.00 36.00L0.00 18.00Z' fill='none' stroke='%23d9a441' stroke-opacity='.35' stroke-width='1.2'/></svg>");background-attachment:fixed,fixed}body.honey-bg header{background:linear-gradient(90deg,#5a3d07,#8a5a0a 60%,#c98a0b)}body.honey-bg .card{box-shadow:0 1px 3px rgba(90,61,7,.12);border-color:#ecd9ad}body.honey-bg main>h2{color:#5a3d07}@media print{body.honey-bg{background:#fff}}
 .sub{border-top:1px solid #e6eaee;margin-top:10px;padding-top:8px}
+.weigh{border-collapse:collapse;font-size:14px;margin:6px 0;width:100%}.weigh th,.weigh td{text-align:left;padding:3px 6px;border-bottom:1px solid #f0e3c4}.weigh th{color:#5a3d07;font-weight:600}
 .badge.bad{background:#fbdada;color:#7c1515}
 .bar{display:grid;grid-template-columns:minmax(120px,40%) 1fr auto;gap:8px;align-items:center;font-size:14px;margin:4px 0}
 .bar-t{background:#e3e8ed;border-radius:4px;height:14px}.bar-f{background:#c98a0b;height:14px;border-radius:4px}
@@ -221,8 +222,8 @@ function get(table, query) { return authed('/rest/v1/' + table + '?' + query, { 
 
 // ---- HoneyTrace page logic. Assembled into app/honey/index.html by tools/build_honey_page.py
 // ------------------------------------------------------------------ lists
-var CLASSES = [['mangrove', 'Mangrove honey'], ['terrestrial', 'Terrestrial (woodland) honey'], ['other', 'Other honey']];
-var HABITATS = [['mangrove', 'Mangrove'], ['terrestrial_woodland', 'Terrestrial woodland'], ['other', 'Other']];
+var CLASSES = [['mangrove', 'Mangrove honey'], ['terrestrial', 'Terrestrial (woodland) honey'], ['mixed', 'Mixed honey (mangrove and woodland)'], ['unknown', 'Honey type not known'], ['other', 'Other honey']];
+var HABITATS = [['mangrove', 'Mangrove'], ['terrestrial_woodland', 'Terrestrial woodland'], ['mixed', 'Mixed - between mangrove and woodland'], ['unknown', 'Not known'], ['other', 'Other']];
 var HIVE_TYPES = [['kenya_top_bar', 'Kenya top bar'], ['langstroth', 'Langstroth'], ['log', 'Log hive'], ['other', 'Other']];
 var STEPS = [['extraction', 'Extraction'], ['filtration', 'Filtration'], ['settling', 'Settling'], ['warming', 'Warming'], ['decrystallising', 'Decrystallising'], ['other', 'Other']];
 var TESTS = [['moisture', 'Moisture'], ['hmf', 'HMF'], ['diastase', 'Diastase'], ['sugars', 'Sugars'], ['pollen', 'Pollen'], ['residues', 'Residues'], ['other', 'Other']];
@@ -272,8 +273,9 @@ function loadOrg() {
     get('honey_producer_contacts', 'select=producer_id,phone,village'),
     get('honey_apiaries', 'select=id,apiary_ref,producer_id,name,habitat,habitat_note,community,status&' + o + '&order=name.asc'),
     get('honey_hives', 'select=id,hive_ref,apiary_id,producer_id,hive_type,label,status&' + o + '&order=label.asc'),
-    get('honey_harvests', 'select=id,harvest_ref,producer_id,apiary_id,harvest_date,honey_class,class_note,quantity_kg,received_kg,method,observations,community_verified_at,document_verified_at,disputed_at,status,void_reason,created_by&' + o + '&order=harvest_date.desc,harvest_ref.desc'),
-    get('honey_apiary_locations', 'select=apiary_id,accuracy_m,source,created_at&is_current=eq.true')
+    get('honey_harvests', 'select=id,harvest_ref,producer_id,apiary_id,harvest_date,honey_class,class_note,quantity_kg,received_kg,method,observations,community_verified_at,document_verified_at,disputed_at,status,void_reason,created_by,weigh_stage,container_tare_kg,comb_gross_kg,pressed_gross_kg,pressed_at,settled_gross_kg,settled_at,scum_kg&' + o + '&order=harvest_date.desc,harvest_ref.desc'),
+    get('honey_apiary_locations', 'select=apiary_id,accuracy_m,source,created_at&is_current=eq.true'),
+    get('honey_harvest_hives', 'select=harvest_id,hive_id')
   ] : [
     get('honey_intakes', 'select=id,intake_ref,received_at,quantity_kg,consumed_kg,document_ref,note&' + o + '&order=received_at.desc'),
     get('honey_intake_lines', 'select=id,intake_id,harvest_id,quantity_kg,consumed_kg'),
@@ -289,7 +291,7 @@ function loadOrg() {
   return Promise.all(q).then(function (r) {
     if (isGroup()) {
       D.producers = r[0] || []; D.contacts = {}; (r[1] || []).forEach(function (c) { D.contacts[c.producer_id] = c; });
-      D.apiaries = r[2] || []; D.hives = r[3] || []; D.harvests = r[4] || []; D.locs = {}; (r[5] || []).forEach(function (l) { D.locs[l.apiary_id] = l; });
+      D.apiaries = r[2] || []; D.hives = r[3] || []; D.harvests = r[4] || []; D.locs = {}; (r[5] || []).forEach(function (l) { D.locs[l.apiary_id] = l; }); D.harvestHives = r[6] || [];
     } else {
       D.intakes = r[0] || []; D.lines = r[1] || []; D.harvests = {}; (r[2] || []).forEach(function (x) { D.harvests[x.id] = x; });
       D.batches = r[3] || []; D.materials = r[4] || []; D.runs = r[5] || []; D.packages = r[6] || []; D.dispatches = r[7] || [];
@@ -398,13 +400,28 @@ function doHarvest(ev) {
   ev.preventDefault();
   var ap = S.d.apiaries.filter(function (a) { return a.id === val('hh-apiary'); })[0];
   var hives = Array.prototype.filter.call(document.querySelectorAll('.hh-hive'), function (c) { return c.checked; }).map(function (c) { return c.value; });
-  var kgv = num(val('hh-kg'));
-  if (!need(ap, 'Choose the apiary.') || !need(val('hh-method').length >= 2, 'Say how the honey was harvested.') || !need(kgv > 0, 'Enter the weight harvested in kg.') || !need(val('hh-date'), 'Enter the harvest date.')) return;
+  var staged = (S.hhMode || 'stages') === 'stages', kgv = num(val('hh-kg')), comb = num(val('hh-comb')), tare = num(val('hh-tare')), scum = num(val('hh-scum'));
+  if (!need(ap, 'Choose the apiary.') || !need(val('hh-method').length >= 2, 'Say how the honey was harvested.') || !need(val('hh-date'), 'Enter the harvest date.')) return;
+  if (staged) {
+    if (!need(tare >= 0, 'Enter the container weight in kg.') || !need(comb > tare, 'Enter the weight of the combs with the container - it must be more than the container.') || !need(scum >= 0, 'Enter the scum deduction (usually 0.5 kg).')) return;
+  } else if (!need(kgv > 0, 'Enter the final net weight in kg.')) return;
   var p = { p_apiary_id: ap.id, p_producer_id: ap.producer_id, p_hive_ids: hives.length ? hives : null, p_harvest_date: val('hh-date'),
-            p_honey_class: val('hh-class'), p_class_note: val('hh-classnote') || null, p_quantity_kg: kgv, p_method: val('hh-method'),
-            p_observations: val('hh-obs') || null, p_location_note: val('hh-loc') || null };
+            p_honey_class: val('hh-class'), p_class_note: val('hh-classnote') || null, p_quantity_kg: staged ? null : kgv, p_method: val('hh-method'),
+            p_observations: val('hh-obs') || null, p_location_note: val('hh-loc') || null,
+            p_comb_gross_kg: staged ? comb : null, p_container_tare_kg: staged ? tare : null, p_scum_kg: staged ? scum : 0.5 };
   p.p_client_id = cid('harvest', p);
-  act(function () { return rpc('record_honey_harvest', p); }, function (r) { return 'Harvest ' + r.harvest_ref + ' recorded: ' + kg(kgv) + '. Give this reference to the buyer.'; }, function () { S.form = null; });
+  act(function () { return rpc('record_honey_harvest', p); }, function (r) {
+    return 'Harvest ' + r.harvest_ref + ' recorded: ' + (r.weigh_stage === 'comb' ? kg(r.quantity_kg) + ' of combs (provisional). Weigh again after pressing and after settling.' : kg(r.quantity_kg) + '. Give this reference to the buyer.');
+  }, function () { S.form = null; S.hhPrefill = null; });
+}
+function doWeigh(ev, hv, stage) {
+  ev.preventDefault();
+  var g = num(val('wg-gross')), sc = num(val('wg-scum'));
+  if (!need(g > Number(hv.container_tare_kg), 'Enter the weight with the container - it must be more than the container (' + kg(hv.container_tare_kg) + ').')) return;
+  if (stage === 'settled' && !need(sc >= 0, 'Enter the scum deduction.')) return;
+  act(function () { return rpc('record_honey_harvest_weighing', { p_harvest_id: hv.id, p_stage: stage, p_gross_kg: g, p_weighed_at: new Date(val('wg-at') || Date.now()).toISOString(), p_scum_kg: stage === 'settled' ? sc : null }); },
+    function (r) { return hv.harvest_ref + (stage === 'pressed' ? ' after pressing: ' + kg(r.net_kg) + ' net (provisional, scum still to settle).' : ' settled: ' + kg(r.net_kg) + ' net - final. It can now be collected.'); },
+    function () { S.form = null; }, true);
 }
 function doVerify(ev, hv) {
   ev.preventDefault();
@@ -427,6 +444,7 @@ function doFind(ev) {
   rpc('find_honey_harvest', { p_harvest_ref: ref }).then(function (r) {
     setBusy(false);
     if (!r || !r.found) return setFlash('err', 'No harvest with that reference.');
+    if (r.weigh_stage && r.weigh_stage !== 'settled') return setFlash('err', r.harvest_ref + ' is still settling. It can be collected once its settled weight is recorded.');
     if (S.intakeLines.some(function (l) { return l.harvest_id === r.harvest_id; })) return setFlash('err', 'That harvest is already on this delivery.');
     S.intakeLines.push(Object.assign({ kg: r.remaining_kg }, r)); S.flash = null; render();
   }, function (e) { fail(e); });
@@ -589,7 +607,7 @@ function btn(id, text, busyText, cls, onclick, type) {
   return h('button', { id: id, type: type || 'button', 'class': cls, 'data-label': text, 'data-busy': busyText, disabled: S.busy, text: S.busy ? busyText : text, onclick: onclick });
 }
 function toggle(name, text, cls) { return h('button', { type: 'button', 'class': 'sec small ' + (cls || ''), id: 'open-' + name, text: text, onclick: function () { S.form = S.form === name ? null : name; S.flash = null; render(); } }); }
-function cancel() { return h('button', { type: 'button', 'class': 'sec', text: 'Cancel', onclick: function () { S.form = null; S.flash = null; render(); } }); }
+function cancel() { return h('button', { type: 'button', 'class': 'sec', text: 'Cancel', onclick: function () { S.form = null; S.flash = null; S.hhPrefill = null; render(); } }); }
 function input(id, attrs) { return h('input', Object.assign({ id: id }, attrs || {})); }
 function verifBadges(x) {
   x = { community_verified_at: x.community_verified_at || x.community_verified, document_verified_at: x.document_verified_at || x.document_verified, disputed_at: x.disputed_at || x.disputed };
@@ -658,6 +676,20 @@ function viewProducers() {
   return out;
 }
 // ---- harvests
+function weighView(x) {
+  if (x.comb_gross_kg == null) return null;
+  var t = Number(x.container_tare_kg), row = function (lbl, g, extra) { return h('tr', {}, h('td', { text: lbl }), h('td', { text: g == null ? '-' : kg(g) }), h('td', { text: g == null ? '' : extra })); };
+  return h('table', { 'class': 'weigh' }, h('tr', {}, h('th', { text: 'Weighing' }), h('th', { text: 'With container' }), h('th', { text: 'Net' })),
+    row('1. Combs', x.comb_gross_kg, kg(r3(x.comb_gross_kg - t))),
+    row('2. After pressing', x.pressed_gross_kg, x.pressed_gross_kg == null ? '' : kg(r3(x.pressed_gross_kg - t)) + ' (' + kg(r3(x.pressed_gross_kg - t - x.scum_kg)) + ' after scum)'),
+    row('3. Settled', x.settled_gross_kg, x.settled_gross_kg == null ? '' : kg(r3(x.settled_gross_kg - t - x.scum_kg)) + ' final'),
+    h('tr', {}, h('td', { colspan: 3, 'class': 'muted', text: 'Container ' + kg(t) + ', scum ' + kg(x.scum_kg) + ' deducted at settling' })));
+}
+function sameHives(x) {
+  var hv = []; (S.d.harvestHives || []).forEach(function (l) { if (l.harvest_id === x.id) hv.push(l.hive_id); });
+  S.hhApiary = x.apiary_id; S.hhPrefill = { hives: hv, cls: x.honey_class === 'mangrove' ? 'terrestrial' : 'mangrove' }; S.form = 'harvest'; S.flash = null; render();
+  var f = $('#form-harvest'); if (f && f.scrollIntoView) f.scrollIntoView();
+}
 function viewHarvests() {
   var D = S.d, out = [h('div', { 'class': 'row' }, h('h2', { text: 'Harvests' }), canWrite() && D.apiaries.length ? toggle('harvest', 'Record a harvest') : null), flash()];
   if (S.form === 'harvest') {
@@ -667,11 +699,18 @@ function viewHarvests() {
     out.push(h('form', { 'class': 'card', id: 'form-harvest', onsubmit: doHarvest },
       field('Apiary', sel('hh-apiary', apOpts, cur, function (e) { S.hhApiary = e.target.value; render(); })),
       hives.length ? h('div', {}, h('label', { text: 'Hives harvested' }), hives.map(function (x) {
-        return h('div', { 'class': 'pickrow' }, h('input', { type: 'checkbox', 'class': 'hh-hive', id: 'hh-' + x.id, value: x.id }), h('label', { 'for': 'hh-' + x.id, style: 'margin:4px 0', text: x.label + ' (' + x.hive_ref + ')' }));
+        return h('div', { 'class': 'pickrow' }, h('input', { type: 'checkbox', 'class': 'hh-hive', id: 'hh-' + x.id, value: x.id, checked: !!(S.hhPrefill && S.hhPrefill.hives.indexOf(x.id) >= 0) }), h('label', { 'for': 'hh-' + x.id, style: 'margin:4px 0', text: x.label + ' (' + x.hive_ref + ')' }));
       })) : h('div', { 'class': 'muted', text: 'This apiary has no hives registered.' }),
-      h('div', { 'class': 'grid2' }, h('div', {}, field('Harvest date', input('hh-date', { type: 'date', value: today(), max: today() }))), h('div', {}, field('Weight harvested, kg', input('hh-kg', { inputmode: 'decimal' })))),
-      field('Honey type', sel('hh-class', CLASSES, curAp.habitat === 'terrestrial_woodland' ? 'terrestrial' : curAp.habitat === 'other' ? 'other' : 'mangrove')),
-      h('p', { 'class': 'muted', text: 'Mangrove honey can only come from an apiary registered in mangrove; terrestrial honey only from a woodland apiary.' }),
+      field('Harvest date', input('hh-date', { type: 'date', value: today(), max: today() })),
+      field('Honey type', sel('hh-class', CLASSES, S.hhPrefill ? S.hhPrefill.cls : curAp.habitat === 'terrestrial_woodland' ? 'terrestrial' : curAp.habitat === 'other' ? 'other' : curAp.habitat === 'unknown' ? 'unknown' : 'mangrove')),
+      h('p', { 'class': 'muted', text: 'Mangrove honey comes from a mangrove or mixed apiary, terrestrial from a woodland or mixed apiary. If the same hives gave both, record each honey type as its own harvest, each in its own container.' }),
+      field('How is it weighed?', sel('hh-mode', [['stages', 'In 3 stages: combs now, after pressing, after settling (3 days)'], ['net', 'Final net weight already known']], S.hhMode || 'stages', function (e) { S.hhMode = e.target.value; render(); })),
+      (S.hhMode || 'stages') === 'stages' ? h('div', { 'class': 'sub' },
+        h('div', { 'class': 'grid2' }, h('div', {}, field('Container weight (empty), kg', input('hh-tare', { inputmode: 'decimal' }))),
+          h('div', {}, field('Combs with container, kg', input('hh-comb', { inputmode: 'decimal' })))),
+        field('Scum deduction at settling, kg', input('hh-scum', { inputmode: 'decimal', value: '0.5' })),
+        h('p', { 'class': 'muted', text: 'The container is deducted at every weighing; the scum deduction at the settled weighing. The kg stays provisional until the settled weight is recorded.' }))
+        : field('Final net weight (honey only), kg', input('hh-kg', { inputmode: 'decimal' })),
       field('Honey type note (required for "Other")', input('hh-classnote')),
       field('Harvest method', input('hh-method', { placeholder: 'For example: smoker, press' })),
       field('Where exactly (optional, private)', input('hh-loc')), field('Observations (optional)', h('textarea', { id: 'hh-obs', rows: 2 })),
@@ -685,10 +724,22 @@ function viewHarvests() {
       h('div', { 'class': 'row' }, h('div', {}, h('div', { 'class': 'name', text: label(CLASSES, x.honey_class) + ' - ' + kg(x.quantity_kg) }), h('span', { 'class': 'ref', text: x.harvest_ref })),
         x.status === 'void' ? h('span', { 'class': 'badge bad', text: 'Withdrawn' }) : null),
       h('div', { 'class': 'muted', text: p.full_name + ' - ' + ap.name + ' - ' + x.harvest_date }),
-      h('div', { 'class': 'muted', text: kg(x.received_kg) + ' collected by buyers, ' + kg(r3(x.quantity_kg - x.received_kg)) + ' not yet collected' }),
+      weighView(x),
+      x.weigh_stage === 'settled' ? h('div', { 'class': 'muted', text: kg(x.received_kg) + ' collected by buyers, ' + kg(r3(x.quantity_kg - x.received_kg)) + ' not yet collected' })
+        : h('span', { 'class': 'badge wait', text: x.weigh_stage === 'comb' ? 'Not yet pressed - not ready for collection' : 'Settling - not ready for collection' }),
       x.status === 'void' ? h('div', { 'class': 'muted', text: 'Reason: ' + x.void_reason }) : h('div', {}, verifBadges(x)),
-      x.status !== 'void' ? h('div', { 'class': 'actions' }, verifier && !mine ? toggle('verify-' + x.id, 'Verify') : null,
+      x.status !== 'void' ? h('div', { 'class': 'actions' },
+        canWrite() && x.weigh_stage === 'comb' ? toggle('press-' + x.id, 'Weight after pressing') : null,
+        canWrite() && x.weigh_stage === 'pressed' ? toggle('settle-' + x.id, 'Weight after settling') : null,
+        canWrite() ? h('button', { type: 'button', 'class': 'sec small', id: 'other-' + x.id, text: 'Same hives, other honey type', onclick: function () { sameHives(x); } }) : null,
+        verifier && !mine ? toggle('verify-' + x.id, 'Verify') : null,
         canWrite() && Number(x.received_kg) === 0 ? toggle('void-' + x.id, 'Withdraw', 'danger') : null) : null,
+      S.form === 'press-' + x.id || S.form === 'settle-' + x.id ? h('form', { id: 'form-weigh', onsubmit: function (e) { doWeigh(e, x, S.form.indexOf('press-') === 0 ? 'pressed' : 'settled'); } },
+        field(S.form.indexOf('press-') === 0 ? 'Pressed honey with the container, kg' : 'Settled honey (with scum) with the container, kg', input('wg-gross', { inputmode: 'decimal' })),
+        S.form.indexOf('settle-') === 0 ? field('Scum deduction, kg', input('wg-scum', { inputmode: 'decimal', value: String(Number(x.scum_kg)) })) : null,
+        field('Weighed at', input('wg-at', { type: 'datetime-local', value: nowLocal() })),
+        h('p', { 'class': 'muted', text: 'Container: ' + kg(x.container_tare_kg) + ' is deducted.' }),
+        h('div', { 'class': 'actions' }, btn('btn-weigh', 'Save weight', 'Saving...', '', null, 'submit'), cancel())) : null,
       S.form === 'verify-' + x.id ? h('form', { id: 'form-verify', onsubmit: function (e) { doVerify(e, x); } },
         h('div', { 'class': 'grid2' }, h('div', {}, field('Check', sel('vf-type', [['community', 'Community check'], ['document', 'Document check']], 'community'))),
           h('div', {}, field('Outcome', sel('vf-outcome', [['verified', 'Confirmed'], ['rejected', 'Rejected']], 'verified')))),
