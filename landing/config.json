@@ -1,5 +1,6 @@
 {
   "env": "production",
   "url": "https://ekahacxukzxalbgwtixm.supabase.co",
-  "key": "sb_publishable_HLBpNQL7M33F9sSsQJlVpw_E0TAYb7I"
+  "key": "sb_publishable_HLBpNQL7M33F9sSsQJlVpw_E0TAYb7I",
+  "code_sign_in": true
 }

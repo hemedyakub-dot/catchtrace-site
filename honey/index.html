@@ -1000,12 +1000,56 @@ function render() {
   add(v, S.open ? viewBatch() : t === 'producers' ? viewProducers() : t === 'harvests' ? viewHarvests() : t === 'intake' ? viewIntake()
        : t === 'batches' ? viewBatches() : t === 'stock' ? viewStock() : viewDash());
 }
+// sign-in: password, or a code sent by email (shown when config.json has "code_sign_in": true) - same as the buying page
+function loginMode(mode) {
+  var e = $('#email') || $('#otp-email');
+  if (e && e.value.trim()) S.login.email = e.value.trim();
+  S.login.mode = mode; S.flash = null; render();
+}
+function doSendCode(ev) {
+  ev.preventDefault();
+  if (S.busy) return;
+  var email = $('#otp-email').value.trim();
+  if (!/^[^@\s]+@[^@\s]+$/.test(email)) return setFlash('err', 'Enter your full email address.');
+  setFlash(null); setBusy(true);
+  requestCode(email).then(function () { S.busy = false; S.login = { mode: 'code', email: email }; S.flash = null; render(); },
+    function (e) { setBusy(false); setFlash('err', e instanceof NetErr ? 'No connection. Try again.' : e.message); });
+}
+function doVerifyCode(ev) {
+  ev.preventDefault();
+  if (S.busy) return;
+  var code = $('#otp-code').value.replace(/\s+/g, '');
+  if (!/^\d{6,10}$/.test(code)) return setFlash('err', 'Enter the code from the email, digits only.');
+  setFlash(null); setBusy(true);
+  verifyCode(S.login.email, code).then(afterSignIn, function (e) { setBusy(false); setFlash('err', e instanceof NetErr ? 'No connection. Try again.' : e.message); });
+}
+function loginBtn(id, label, busyLabel) {
+  return h('button', { type: 'submit', id: id, 'class': 'big', 'data-label': label, 'data-busy': busyLabel, disabled: S.busy, text: S.busy ? busyLabel : label });
+}
+function linkBtn(id, text, mode) {
+  return h('button', { type: 'button', id: id, 'class': 'sec', style: 'width:100%;margin-top:8px', text: text, onclick: function () { loginMode(mode); } });
+}
 function viewLogin() {
+  var m = S.login.mode;
+  if (m === 'email') return [h('h2', { text: 'Sign in with a code' }), flash(),
+    h('form', { 'class': 'card', id: 'code-request', onsubmit: doSendCode },
+      field('Email', h('input', { id: 'otp-email', type: 'email', autocomplete: 'username', value: S.login.email, required: true })),
+      h('p', { 'class': 'muted', text: 'A sign-in code will be sent to this address. No password is needed.' }),
+      h('div', { 'class': 'actions' }, loginBtn('otp-send', 'Send me a code', 'Sending...')),
+      linkBtn('to-password', 'Use a password instead', 'password'))];
+  if (m === 'code') return [h('h2', { text: 'Enter your code' }), flash(),
+    h('div', { 'class': 'msg info', id: 'otp-sent', text: 'If ' + S.login.email + ' has an account, a code has been sent to it. It can take a minute to arrive. No email? Check the address, or ask your administrator.' }),
+    h('form', { 'class': 'card', id: 'code-verify', onsubmit: doVerifyCode },
+      field('Code from the email', h('input', { id: 'otp-code', inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: '12' })),
+      h('div', { 'class': 'actions' }, loginBtn('otp-go', 'Sign in', 'Signing in...')),
+      linkBtn('otp-again', 'Send a new code', 'email'), linkBtn('to-password', 'Use a password instead', 'password'))];
   return [h('h2', { text: 'Sign in' }), flash(),
     h('form', { 'class': 'card', id: 'login', onsubmit: doSignIn },
-      field('Email', h('input', { id: 'email', type: 'email', autocomplete: 'username', required: true })),
+      field('Email', h('input', { id: 'email', type: 'email', autocomplete: 'username', value: S.login.email, required: true })),
       field('Password', h('input', { id: 'password', type: 'password', autocomplete: 'current-password', required: true })),
-      h('div', { 'class': 'actions' }, h('button', { type: 'submit', id: 'login-go', 'class': 'big', 'data-label': 'Sign in', 'data-busy': 'Signing in...', disabled: S.busy, text: S.busy ? 'Signing in...' : 'Sign in' })))];
+      h('div', { 'class': 'actions' }, loginBtn('login-go', 'Sign in', 'Signing in...')),
+      // Sign-in by emailed code is switched on in config.json ("code_sign_in": true) once mail delivery is set up.
+      S.cfg && S.cfg.code_sign_in === true ? linkBtn('to-code', 'Sign in with a code sent by email', 'email') : null)];
 }
 
 // ------------------------------------------------------------------ boot
